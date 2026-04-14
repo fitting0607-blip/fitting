@@ -1,10 +1,11 @@
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { supabase } from '../../supabase';
 
 export default function LoginScreen() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,7 +28,7 @@ export default function LoginScreen() {
         return;
       }
 
-      Alert.alert('로그인 성공', '로그인되었습니다.');
+      router.replace('/(tabs)');
     } catch (e) {
       Alert.alert('오류', e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');
     } finally {
