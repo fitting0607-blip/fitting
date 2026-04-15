@@ -1,0 +1,27 @@
+# fitting
+
+## Stack
+- Expo Router + Supabase + TypeScript
+
+## Supabase client
+- Use the root-level `supabase.ts` export for the Supabase client (do not duplicate client setup elsewhere unless there is a clear reason).
+
+## Auth
+- Use `supabase.auth` for authentication.
+
+## Routing
+- `app/(auth)/` — login and signup flows
+- `app/(tabs)/` — main app (tab navigation)
+
+## Database
+- User profile data: `public.users` table in Supabase
+
+## Done (baseline)
+- Login
+- Signup step 1
+
+## Styling
+- Use React Native `StyleSheet` for styles (not Tailwind/CSS-in-JS alternatives unless already introduced).
+
+## Repository
+- https://github.com/fitting0607-blip/fitting.git
