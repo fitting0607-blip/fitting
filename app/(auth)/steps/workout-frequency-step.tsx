@@ -28,6 +28,7 @@ export function WorkoutFrequencyStep({
             selected={draft.workout_frequency === opt}
             onPress={() => setDraft((prev) => ({ ...prev, workout_frequency: opt }))}
             fullWidth
+            containerStyle={{ height: 56, borderRadius: 12 }}
           />
         ))}
       </View>

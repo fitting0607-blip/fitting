@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { Pressable, Text, View } from 'react-native';
 
 import { layoutStyles, optionButtonStyles } from './ui';
@@ -8,11 +9,15 @@ export function OptionButton({
   selected,
   onPress,
   fullWidth,
+  containerStyle,
+  textStyle,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   fullWidth?: boolean;
+  containerStyle?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }) {
   return (
     <Pressable
@@ -21,9 +26,16 @@ export function OptionButton({
         optionButtonStyles.buttonBase,
         selected ? optionButtonStyles.buttonSelected : null,
         fullWidth ? { width: '100%', marginRight: 0 } : null,
+        containerStyle,
       ]}
     >
-      <Text style={[optionButtonStyles.textBase, selected ? optionButtonStyles.textSelected : null]}>
+      <Text
+        style={[
+          optionButtonStyles.textBase,
+          selected ? optionButtonStyles.textSelected : null,
+          textStyle,
+        ]}
+      >
         {label}
       </Text>
     </Pressable>

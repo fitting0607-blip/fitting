@@ -39,6 +39,7 @@ export function WorkoutGoalsStep({
               label={goal}
               selected={draft.workout_goals.includes(goal)}
               onPress={() => toggle(goal)}
+              containerStyle={{ height: 48, borderRadius: 12 }}
             />
           ))}
         </WrapRow>

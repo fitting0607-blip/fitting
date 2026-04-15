@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '../../supabase';
 import { AgeStep } from './steps/age-step';
@@ -94,20 +95,25 @@ export default function RegisterScreen() {
     draft.agreements.pointsPolicy;
 
   return (
-    <View style={layoutStyles.screen}>
+    <SafeAreaView style={layoutStyles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={layoutStyles.headerRow}>
-        <Pressable onPress={goBack} hitSlop={12} style={layoutStyles.backButton}>
+      <View style={layoutStyles.screen}>
+        <View style={layoutStyles.headerRow}>
+          <Pressable
+            onPress={goBack}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            style={layoutStyles.backButton}
+          >
           <Ionicons name="chevron-back" size={24} color="#111827" />
-        </Pressable>
-        <Text style={layoutStyles.progressText}>{progressLabel}</Text>
-        <View style={{ width: 24 }} />
-      </View>
+          </Pressable>
+          <Text style={layoutStyles.progressText}>{progressLabel}</Text>
+          <View style={{ width: 44 }} />
+        </View>
 
-      {step === 1 ? (
-        <View style={layoutStyles.body}>
-          <Text style={layoutStyles.title}>이메일과 비밀번호를 입력해 주세요</Text>
+        {step === 1 ? (
+          <View style={layoutStyles.body}>
+            <Text style={layoutStyles.title}>이메일과 비밀번호를 입력해 주세요</Text>
 
           <Text style={layoutStyles.label}>이메일</Text>
           <TextInput
@@ -170,53 +176,40 @@ export default function RegisterScreen() {
               if (step1CanProceed) goNext();
             }}
           />
-        </View>
-      ) : null}
+          </View>
+        ) : null}
 
-      {step === 2 ? (
-        <MbtiStep draft={draft} setDraft={setDraft} onNext={goNext} />
-      ) : null}
-      {step === 3 ? (
-        <SportsStep draft={draft} setDraft={setDraft} onNext={goNext} />
-      ) : null}
-      {step === 4 ? (
-        <WorkoutFrequencyStep
-          draft={draft}
-          setDraft={setDraft}
-          onNext={goNext}
-        />
-      ) : null}
-      {step === 5 ? (
-        <WorkoutGoalsStep draft={draft} setDraft={setDraft} onNext={goNext} />
-      ) : null}
-      {step === 6 ? (
-        <NicknameStep draft={draft} setDraft={setDraft} onNext={goNext} />
-      ) : null}
-      {step === 7 ? (
-        <GenderStep draft={draft} setDraft={setDraft} onNext={goNext} />
-      ) : null}
-      {step === 8 ? (
-        <ProfileImageStep
-          draft={draft}
-          setDraft={setDraft}
-          supabase={supabase}
-          onNext={goNext}
-          onLoadingChange={setLoading}
-        />
-      ) : null}
-      {step === 9 ? (
-        <AgeStep
-          draft={draft}
-          setDraft={setDraft}
-          supabase={supabase}
-          onLoadingChange={setLoading}
-          onDone={() => {
-            console.log('[register] navigation:router.replace("/(tabs)")');
-            router.replace('/(tabs)');
-          }}
-        />
-      ) : null}
-    </View>
+        {step === 2 ? <MbtiStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
+        {step === 3 ? <SportsStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
+        {step === 4 ? (
+          <WorkoutFrequencyStep draft={draft} setDraft={setDraft} onNext={goNext} />
+        ) : null}
+        {step === 5 ? <WorkoutGoalsStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
+        {step === 6 ? <NicknameStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
+        {step === 7 ? <GenderStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
+        {step === 8 ? (
+          <ProfileImageStep
+            draft={draft}
+            setDraft={setDraft}
+            supabase={supabase}
+            onNext={goNext}
+            onLoadingChange={setLoading}
+          />
+        ) : null}
+        {step === 9 ? (
+          <AgeStep
+            draft={draft}
+            setDraft={setDraft}
+            supabase={supabase}
+            onLoadingChange={setLoading}
+            onDone={() => {
+              console.log('[register] navigation:router.replace(\"/(tabs)\")');
+              router.replace('/(tabs)');
+            }}
+          />
+        ) : null}
+      </View>
+    </SafeAreaView>
   );
 }
 

@@ -1,4 +1,4 @@
-import { Alert, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import type { RegisterDraft, Gender } from './types';
 import { OptionButton, PrimaryButton } from './components';
@@ -24,15 +24,17 @@ export function GenderStep({
     <View style={layoutStyles.body}>
       <View style={{ flex: 1 }}>
         <Text style={layoutStyles.title}>성별을 알려주세요</Text>
-        {OPTIONS.map((opt) => (
-          <OptionButton
-            key={opt.value}
-            label={opt.label}
-            selected={draft.gender === opt.value}
-            onPress={() => setDraft((prev) => ({ ...prev, gender: opt.value }))}
-            fullWidth
-          />
-        ))}
+        <View style={styles.row}>
+          {OPTIONS.map((opt) => (
+            <OptionButton
+              key={opt.value}
+              label={opt.label}
+              selected={draft.gender === opt.value}
+              onPress={() => setDraft((prev) => ({ ...prev, gender: opt.value }))}
+              containerStyle={styles.half}
+            />
+          ))}
+        </View>
       </View>
 
       <View style={layoutStyles.bottomArea}>
@@ -51,4 +53,18 @@ export function GenderStep({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  half: {
+    width: '48%',
+    height: 56,
+    borderRadius: 12,
+    marginRight: 0,
+    marginBottom: 0,
+  },
+});
 

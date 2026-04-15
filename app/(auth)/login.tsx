@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   primaryButton: {
-    backgroundColor: '#111827',
+    backgroundColor: '#3B3BF9',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   linkText: {
-    color: '#2563EB',
+    color: '#3B3BF9',
     fontWeight: '700',
   },
 });

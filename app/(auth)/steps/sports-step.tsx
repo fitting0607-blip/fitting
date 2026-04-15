@@ -46,6 +46,7 @@ export function SportsStep({
                   label={item}
                   selected={draft.sports.includes(item)}
                   onPress={() => toggle(item)}
+                  containerStyle={{ height: 48, borderRadius: 12 }}
                 />
               ))}
             </WrapRow>

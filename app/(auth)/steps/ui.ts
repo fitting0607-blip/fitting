@@ -16,9 +16,11 @@ export const optionButtonStyles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 20,
+    borderRadius: 12,
+    height: 52,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 8,
     marginBottom: 10,
   },
@@ -37,11 +39,14 @@ export const optionButtonStyles = StyleSheet.create({
 });
 
 export const layoutStyles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
     paddingHorizontal: 20,
-    paddingTop: 14,
   },
   headerRow: {
     flexDirection: 'row',
@@ -50,8 +55,8 @@ export const layoutStyles = StyleSheet.create({
     marginBottom: 8,
   },
   backButton: {
-    width: 24,
-    height: 24,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },

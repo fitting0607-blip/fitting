@@ -1,7 +1,7 @@
-import { Alert, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import type { RegisterDraft } from './types';
-import { OptionButton, PrimaryButton, WrapRow } from './components';
+import { OptionButton, PrimaryButton } from './components';
 import { layoutStyles } from './ui';
 
 type MbtiKey = keyof RegisterDraft['mbtiParts'];
@@ -33,29 +33,61 @@ export function MbtiStep({
       <View style={{ flex: 1 }}>
         <Text style={layoutStyles.title}>MBTI를 알려주세요</Text>
 
-        <View style={{ marginBottom: 8 }}>
-          <WrapRow>
-            <OptionButton label="E" selected={selection.EI === 'E'} onPress={() => setOne('EI', 'E')} />
-            <OptionButton label="I" selected={selection.EI === 'I'} onPress={() => setOne('EI', 'I')} />
-          </WrapRow>
+        <View style={styles.row}>
+          <OptionButton
+            label="E"
+            selected={selection.EI === 'E'}
+            onPress={() => setOne('EI', 'E')}
+            containerStyle={styles.half}
+          />
+          <OptionButton
+            label="I"
+            selected={selection.EI === 'I'}
+            onPress={() => setOne('EI', 'I')}
+            containerStyle={styles.half}
+          />
         </View>
-        <View style={{ marginBottom: 8 }}>
-          <WrapRow>
-            <OptionButton label="S" selected={selection.SN === 'S'} onPress={() => setOne('SN', 'S')} />
-            <OptionButton label="N" selected={selection.SN === 'N'} onPress={() => setOne('SN', 'N')} />
-          </WrapRow>
+        <View style={styles.row}>
+          <OptionButton
+            label="S"
+            selected={selection.SN === 'S'}
+            onPress={() => setOne('SN', 'S')}
+            containerStyle={styles.half}
+          />
+          <OptionButton
+            label="N"
+            selected={selection.SN === 'N'}
+            onPress={() => setOne('SN', 'N')}
+            containerStyle={styles.half}
+          />
         </View>
-        <View style={{ marginBottom: 8 }}>
-          <WrapRow>
-            <OptionButton label="T" selected={selection.TF === 'T'} onPress={() => setOne('TF', 'T')} />
-            <OptionButton label="F" selected={selection.TF === 'F'} onPress={() => setOne('TF', 'F')} />
-          </WrapRow>
+        <View style={styles.row}>
+          <OptionButton
+            label="T"
+            selected={selection.TF === 'T'}
+            onPress={() => setOne('TF', 'T')}
+            containerStyle={styles.half}
+          />
+          <OptionButton
+            label="F"
+            selected={selection.TF === 'F'}
+            onPress={() => setOne('TF', 'F')}
+            containerStyle={styles.half}
+          />
         </View>
-        <View style={{ marginBottom: 8 }}>
-          <WrapRow>
-            <OptionButton label="J" selected={selection.JP === 'J'} onPress={() => setOne('JP', 'J')} />
-            <OptionButton label="P" selected={selection.JP === 'P'} onPress={() => setOne('JP', 'P')} />
-          </WrapRow>
+        <View style={styles.row}>
+          <OptionButton
+            label="J"
+            selected={selection.JP === 'J'}
+            onPress={() => setOne('JP', 'J')}
+            containerStyle={styles.half}
+          />
+          <OptionButton
+            label="P"
+            selected={selection.JP === 'P'}
+            onPress={() => setOne('JP', 'P')}
+            containerStyle={styles.half}
+          />
         </View>
       </View>
 
@@ -75,4 +107,17 @@ export function MbtiStep({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  half: {
+    width: '48%',
+    marginRight: 0,
+    marginBottom: 0,
+  },
+});
 
