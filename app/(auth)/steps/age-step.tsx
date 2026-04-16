@@ -9,6 +9,11 @@ function isValidAge(age: number) {
   return Number.isFinite(age) && age >= 1 && age <= 120;
 }
 
+function isUserAlreadyRegisteredError(message?: string) {
+  const m = (message ?? '').toLowerCase();
+  return m.includes('user already registered') || m.includes('already registered');
+}
+
 export function AgeStep({
   draft,
   setDraft,
@@ -40,28 +45,49 @@ export function AgeStep({
         email: draft.email,
         password: draft.password,
       });
+
+      let userId: string | undefined;
+
       if (signUpError) {
         console.log('[age] signUp 에러:', signUpError.message);
-        Alert.alert('회원가입 실패', signUpError.message);
-        return;
-      }
-      console.log('[age] signUp 성공, user:', data.user?.id);
 
-      // 2. 세션 없으면 로그인
-      let userId = data.user?.id;
-      if (!data.session) {
-        console.log('[age] 세션 없음, signIn 시도');
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: draft.email,
-          password: draft.password,
-        });
-        if (signInError) {
-          console.log('[age] signIn 에러:', signInError.message);
-          Alert.alert('로그인 실패', signInError.message);
+        // 이미 가입된 계정이면 회원가입 에러로 처리하지 않고 로그인 시도
+        if (isUserAlreadyRegisteredError(signUpError.message)) {
+          console.log('[age] 이미 가입된 계정, signIn 시도');
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: draft.email,
+            password: draft.password,
+          });
+          if (signInError) {
+            console.log('[age] signIn 에러:', signInError.message);
+            Alert.alert('로그인 실패', signInError.message);
+            return;
+          }
+          userId = signInData.user?.id;
+          console.log('[age] signIn 성공, user:', userId);
+        } else {
+          Alert.alert('회원가입 실패', signUpError.message);
           return;
         }
-        userId = signInData.user?.id;
-        console.log('[age] signIn 성공, user:', userId);
+      } else {
+        console.log('[age] signUp 성공, user:', data.user?.id);
+
+        // 2. 세션 없으면 로그인
+        userId = data.user?.id;
+        if (!data.session) {
+          console.log('[age] 세션 없음, signIn 시도');
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: draft.email,
+            password: draft.password,
+          });
+          if (signInError) {
+            console.log('[age] signIn 에러:', signInError.message);
+            Alert.alert('로그인 실패', signInError.message);
+            return;
+          }
+          userId = signInData.user?.id;
+          console.log('[age] signIn 성공, user:', userId);
+        }
       }
 
       if (!userId) {
