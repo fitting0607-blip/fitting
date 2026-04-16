@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
@@ -26,12 +26,31 @@ type PublicUser = {
 
 type FeedTab = 'grid' | 'body';
 
+type PostRow = {
+  id: string;
+  user_id: string;
+  post_type: '일반' | '바디';
+  image_urls: string[] | null;
+  created_at: string;
+};
+
+type PostRowResolved = PostRow & {
+  display_image_urls: string[];
+};
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const GRID_GAP = 2;
+const GRID_ITEM = Math.floor((SCREEN_WIDTH - 16 * 2 - GRID_GAP * 2) / 3);
+
 export default function MyScreen() {
   const router = useRouter();
   const [me, setMe] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(false);
   const [tagsExpanded, setTagsExpanded] = useState(false);
   const [feedTab, setFeedTab] = useState<FeedTab>('grid');
+  const [posts, setPosts] = useState<PostRowResolved[]>([]);
+  const [countNormal, setCountNormal] = useState(0);
+  const [countBody, setCountBody] = useState(0);
 
   const loadMe = useCallback(async () => {
     setLoading(true);
@@ -62,6 +81,74 @@ export default function MyScreen() {
     }
   }, []);
 
+  const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
+    const list = (urls ?? []).filter(Boolean);
+    if (list.length === 0) return [];
+
+    const resolved = await Promise.all(
+      list.map(async (u) => {
+        if (typeof u !== 'string') return null;
+        if (u.startsWith('http://') || u.startsWith('https://')) return u;
+
+        // If `image_urls` stores storage paths (e.g. "{user_id}/{ts}_0.jpg"),
+        // generate a signed URL so it works even when the bucket isn't public.
+        const { data, error } = await supabase.storage.from('posts').createSignedUrl(u, 60 * 60);
+        if (!error && data?.signedUrl) return data.signedUrl;
+
+        // Fallback: attempt public URL (works when bucket is public)
+        const pub = supabase.storage.from('posts').getPublicUrl(u).data?.publicUrl;
+        return pub || null;
+      })
+    );
+
+    return resolved.filter(Boolean) as string[];
+  }, []);
+
+  const loadMyPosts = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user?.id) {
+        setPosts([]);
+        setCountNormal(0);
+        setCountBody(0);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('posts')
+        .select('id,user_id,post_type,image_urls,created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      const list = (data ?? []) as PostRow[];
+      const resolved = await Promise.all(
+        list.map(async (p) => ({
+          ...p,
+          display_image_urls: await resolveImageUrls(p.image_urls),
+        }))
+      );
+      setPosts(resolved);
+
+      let n = 0;
+      let b = 0;
+      for (const p of list) {
+        if (p.post_type === '일반') n += 1;
+        if (p.post_type === '바디') b += 1;
+      }
+      setCountNormal(n);
+      setCountBody(b);
+    } catch {
+      setPosts([]);
+      setCountNormal(0);
+      setCountBody(0);
+    }
+  }, [resolveImageUrls]);
+
   useEffect(() => {
     void loadMe();
   }, [loadMe]);
@@ -69,7 +156,8 @@ export default function MyScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadMe();
-    }, [loadMe])
+      void loadMyPosts();
+    }, [loadMe, loadMyPosts])
   );
 
   const tags = useMemo(() => {
@@ -84,6 +172,11 @@ export default function MyScreen() {
     if (tagsExpanded) return tags;
     return tags.slice(0, 4);
   }, [tags, tagsExpanded]);
+
+  const filteredPosts = useMemo(() => {
+    const targetType = feedTab === 'grid' ? '일반' : '바디';
+    return posts.filter((p) => p.post_type === targetType);
+  }, [feedTab, posts]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -149,12 +242,12 @@ export default function MyScreen() {
 
       <View style={styles.countBox}>
         <View style={styles.countCol}>
-          <Text style={styles.countNumber}>0</Text>
+          <Text style={styles.countNumber}>{countNormal}</Text>
           <Text style={styles.countLabel}>일반 게시글</Text>
         </View>
         <View style={styles.countDivider} />
         <View style={styles.countCol}>
-          <Text style={styles.countNumber}>0</Text>
+          <Text style={styles.countNumber}>{countBody}</Text>
           <Text style={styles.countLabel}>바디 게시글</Text>
         </View>
       </View>
@@ -182,9 +275,44 @@ export default function MyScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.emptyWrap}>
-        <Text style={styles.emptyText}>게시물이 없어요</Text>
-      </View>
+      {filteredPosts.length === 0 ? (
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyText}>게시물이 없어요</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredPosts}
+          keyExtractor={(item) => item.id}
+          numColumns={3}
+          contentContainerStyle={styles.gridList}
+          columnWrapperStyle={styles.gridRow}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => {
+            const thumb = item.display_image_urls?.[0] ?? null;
+            return (
+              <Pressable
+                style={styles.gridItem}
+                onPress={() =>
+                  router.push({ pathname: '/post-detail', params: { id: item.id } })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="내 게시물"
+              >
+                {thumb ? (
+                  <Image
+                    source={{ uri: thumb }}
+                    style={styles.gridImage}
+                    contentFit="cover"
+                    transition={120}
+                  />
+                ) : (
+                  <View style={styles.gridPlaceholder} />
+                )}
+              </Pressable>
+            );
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -351,5 +479,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#6B7280',
+  },
+
+  gridList: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  gridRow: {
+    gap: GRID_GAP,
+    marginBottom: GRID_GAP,
+  },
+  gridItem: {
+    width: GRID_ITEM,
+    height: GRID_ITEM,
+    borderRadius: 0,
+    overflow: 'hidden',
+    backgroundColor: '#E5E7EB',
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gridPlaceholder: {
+    flex: 1,
+    backgroundColor: '#E5E7EB',
   },
 });
