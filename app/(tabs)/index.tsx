@@ -1,17 +1,21 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
+  Image as RNImage,
+  Alert,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Image } from 'expo-image';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { supabase } from '../../supabase';
 
@@ -44,17 +48,25 @@ type Banner = {
   titleMain: string;
 };
 
+type TagKind = 'sport' | 'frequency' | 'goal';
+type TagItem = { kind: TagKind; label: string };
+
 const MAIN = '#3B3BF9';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_RATIO = 240 / 670;
+const MAX_FEED_WIDTH_WEB = 430;
 
 export default function HomeScreen() {
   const router = useRouter();
+  const tabBarHeight = useBottomTabBarHeight();
   const [selectedTab, setSelectedTab] = useState<FeedTab>('일반');
   const [posts, setPosts] = useState<PostFeedRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [feedListWidth, setFeedListWidth] = useState(0);
   const [bannerWidth, setBannerWidth] = useState(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [feedBarHeight, setFeedBarHeight] = useState(0);
+  const [bannerWrapHeight, setBannerWrapHeight] = useState(0);
 
   const [likedIds, setLikedIds] = useState<Record<string, boolean>>({});
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
@@ -67,8 +79,15 @@ export default function HomeScreen() {
     return bannerWidth > 0 ? Math.round(bannerWidth * BANNER_RATIO) : 0;
   }, [bannerWidth]);
 
-  const cardHeight = useMemo(() => Math.round(SCREEN_HEIGHT * 0.6), []);
-  const photoHeight = useMemo(() => Math.round(cardHeight * 0.65), [cardHeight]);
+  const cardHeight = useMemo(() => {
+    const taken = headerHeight + feedBarHeight + bannerWrapHeight + tabBarHeight;
+    const remaining = Math.floor(SCREEN_HEIGHT - taken);
+    return remaining > 0 ? remaining : 0;
+  }, [bannerWrapHeight, feedBarHeight, headerHeight, tabBarHeight]);
+
+  const photoHeight = useMemo(() => {
+    return cardHeight > 0 ? Math.round(cardHeight * 0.72) : 0;
+  }, [cardHeight]);
 
   const loadBanners = useCallback(async (): Promise<Banner[]> => {
     // TODO: Supabase 연동 예정
@@ -227,26 +246,44 @@ export default function HomeScreen() {
       const title = mbti ? `${nickname} · ${mbti}` : nickname;
       const thumb = item.display_image_urls?.[0] ?? item.image_urls?.[0] ?? null;
 
-      const tagsAll = [
-        ...(item.user?.sports?.length ? item.user.sports.map((s) => String(s)) : []),
-        item.user?.workout_frequency ? String(item.user.workout_frequency) : null,
-        ...(item.user?.workout_goals?.length ? item.user.workout_goals.map((g) => String(g)) : []),
-      ].filter(Boolean) as string[];
+      const tagsAll: TagItem[] = [
+        ...(item.user?.sports?.length
+          ? item.user.sports.map((s) => ({ kind: 'sport' as const, label: String(s) }))
+          : []),
+        ...(item.user?.workout_frequency
+          ? [{ kind: 'frequency' as const, label: String(item.user.workout_frequency) }]
+          : []),
+        ...(item.user?.workout_goals?.length
+          ? item.user.workout_goals.map((g) => ({ kind: 'goal' as const, label: String(g) }))
+          : []),
+      ];
 
       const expanded = !!expandedIds[id];
-      const tagsToShow = expanded ? tagsAll : tagsAll.slice(0, 2);
+      const tagsToShow = expanded ? tagsAll : [];
 
       return (
         <View style={[styles.cardWrap, { width: cardWidth }]}>
           <View style={[styles.card, { height: cardHeight }]}>
-            <View style={[styles.photoArea, { height: photoHeight }]}>
-              <Image
-                source={thumb ? { uri: thumb } : undefined}
-                style={styles.photoImage}
-                contentFit="cover"
-                transition={150}
-              />
+            <View style={[styles.photoArea, { width: cardWidth, height: photoHeight }]}>
+              {thumb ? (
+                <RNImage
+                  source={{ uri: thumb }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="contain"
+                />
+              ) : null}
               {!thumb ? <View style={styles.photoPlaceholder} /> : null}
+
+              <Pressable
+                onPress={() => Alert.alert('매칭권을 사용하시겠어요?')}
+                hitSlop={10}
+                style={styles.dumbbellBtn}
+                accessibilityRole="button"
+                accessibilityLabel="매칭권 사용"
+              >
+                <MaterialCommunityIcons name="dumbbell" size={24} color="#FFFFFF" />
+              </Pressable>
+
               <Pressable
                 onPress={() => toggleLike(id)}
                 hitSlop={10}
@@ -254,15 +291,17 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="하트"
               >
-                <Feather
-                  name="heart"
-                  size={20}
-                  color={likedIds[id] ? '#FF3B30' : '#BDBDBD'}
-                />
+                <Feather name="heart" size={20} color={likedIds[id] ? '#FF3B30' : '#BDBDBD'} />
               </Pressable>
             </View>
 
             <View style={styles.infoArea}>
+              {item.content?.trim() ? (
+                <Text style={styles.cardContent} numberOfLines={2}>
+                  {item.content}
+                </Text>
+              ) : null}
+
               <View style={styles.infoTopRow}>
                 <Text style={styles.userTitle} numberOfLines={1}>
                   {title}
@@ -286,30 +325,38 @@ export default function HomeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="태그 펼치기/접기"
                   >
-                    <Text style={styles.expandText}>{expanded ? '∧' : '∨'}</Text>
+                    <Text style={styles.expandText}>{expanded ? '∨' : '∧'}</Text>
                   </Pressable>
                 </View>
               </View>
 
-              {item.content?.trim() ? (
-                <Text style={styles.postContent} numberOfLines={2}>
-                  {item.content}
-                </Text>
-              ) : null}
-
-              <View style={styles.tagsRow}>
-                {tagsToShow.length === 0 ? (
-                  <View style={styles.tagPill}>
-                    <Text style={styles.tagText}>태그 없음</Text>
-                  </View>
-                ) : (
-                  tagsToShow.map((t) => (
-                    <View key={t} style={styles.tagPill}>
-                      <Text style={styles.tagText}>{t}</Text>
+              {expanded ? (
+                <ScrollView
+                  style={styles.tagsScroll}
+                  contentContainerStyle={styles.tagsRow}
+                  showsVerticalScrollIndicator={false}
+                  scrollEnabled
+                >
+                  {tagsToShow.length === 0 ? (
+                    <View style={styles.tagPill}>
+                      <Text style={styles.tagText}>태그 없음</Text>
                     </View>
-                  ))
-                )}
-              </View>
+                  ) : (
+                    tagsToShow.map((t, idx) => (
+                      <View key={`${t.kind}_${t.label}_${idx}`} style={styles.tagPill}>
+                        {t.kind === 'sport' ? (
+                          <MaterialCommunityIcons name="dumbbell" size={13} color="#6B7280" />
+                        ) : t.kind === 'frequency' ? (
+                          <Feather name="zap" size={13} color="#6B7280" />
+                        ) : (
+                          <Feather name="check-square" size={13} color="#6B7280" />
+                        )}
+                        <Text style={styles.tagText}>{t.label}</Text>
+                      </View>
+                    ))
+                  )}
+                </ScrollView>
+              ) : null}
             </View>
           </View>
         </View>
@@ -362,6 +409,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View
         style={styles.header}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
       >
         <Pressable
           onPress={() => {}}
@@ -388,6 +436,7 @@ export default function HomeScreen() {
 
       <View
         style={styles.feedBar}
+        onLayout={(e) => setFeedBarHeight(e.nativeEvent.layout.height)}
       >
         <View style={styles.tabs}>
           <Pressable onPress={() => setSelectedTab('일반')} hitSlop={10}>
@@ -462,7 +511,10 @@ export default function HomeScreen() {
 
       <View
         style={[styles.bannerWrap, bannerHeight ? { height: bannerHeight } : null]}
-        onLayout={(e) => setBannerWidth(e.nativeEvent.layout.width)}
+        onLayout={(e) => {
+          setBannerWidth(e.nativeEvent.layout.width);
+          setBannerWrapHeight(e.nativeEvent.layout.height);
+        }}
       >
         {banners.length === 0 ? (
           <View style={[styles.bannerPlaceholder, bannerHeight ? { height: bannerHeight } : null]} />
@@ -512,9 +564,10 @@ export default function HomeScreen() {
           style={styles.feedList}
           contentContainerStyle={styles.feedListContent}
           onLayout={(e) => {
-            setFeedListWidth(e.nativeEvent.layout.width);
+            const w = e.nativeEvent.layout.width;
+            setFeedListWidth(Platform.OS === 'web' ? Math.min(w, MAX_FEED_WIDTH_WEB) : w);
             console.log('[HomeFeed] FlatList layout', {
-              w: e.nativeEvent.layout.width,
+              w,
               h: e.nativeEvent.layout.height,
             });
           }}
@@ -686,7 +739,9 @@ const styles = StyleSheet.create({
     borderColor: '#EEEEEE',
   },
   photoArea: {
-    backgroundColor: '#E6E6E6',
+    backgroundColor: '#000000',
+    position: 'relative',
+    overflow: 'hidden',
   },
   photoImage: {
     width: '100%',
@@ -699,6 +754,17 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: '#E5E7EB',
+  },
+  dumbbellBtn: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: MAIN,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heartBtn: {
     position: 'absolute',
@@ -714,11 +780,21 @@ const styles = StyleSheet.create({
 
   infoArea: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingTop: 12,
+    paddingTop: 6,
     paddingBottom: 14,
   },
+  cardContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333333',
+    lineHeight: 20,
+  },
   infoTopRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -768,26 +844,27 @@ const styles = StyleSheet.create({
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingBottom: 6,
   },
-  postContent: {
-    marginTop: 10,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-    lineHeight: 18,
+  tagsScroll: {
+    paddingTop: 10,
+    maxHeight: 120,
   },
   tagPill: {
-    backgroundColor: '#F1F1F1',
-    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   tagText: {
     fontSize: 12,
-    color: '#555555',
-    fontWeight: '600',
+    color: '#6B7280',
+    fontWeight: '700',
   },
 
   emptyWrap: {
@@ -804,6 +881,9 @@ const styles = StyleSheet.create({
 
   feedList: {
     flex: 1,
+    width: '100%',
+    alignSelf: 'center',
+    ...(Platform.OS === 'web' ? { maxWidth: MAX_FEED_WIDTH_WEB } : {}),
   },
   feedListContent: {
     paddingBottom: 16,

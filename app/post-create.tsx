@@ -23,6 +23,37 @@ type FeedType = '일반' | '바디';
 const MAIN = '#3B3BF9';
 const MAX_IMAGES = 5;
 
+function decodeBase64ToBytes(base64: string) {
+  const atobImpl: ((data: string) => string) | undefined = (globalThis as any)?.atob;
+  if (atobImpl) {
+    const byteCharacters = atobImpl(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    return new Uint8Array(byteNumbers);
+  }
+
+  // Fallback base64 decoder for environments without atob (e.g. some RN runtimes).
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let str = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+  let output: number[] = [];
+  let i = 0;
+  while (i < str.length) {
+    const enc1 = chars.indexOf(str.charAt(i++));
+    const enc2 = chars.indexOf(str.charAt(i++));
+    const enc3 = chars.indexOf(str.charAt(i++));
+    const enc4 = chars.indexOf(str.charAt(i++));
+    const chr1 = (enc1 << 2) | (enc2 >> 4);
+    const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+    const chr3 = ((enc3 & 3) << 6) | enc4;
+    output.push(chr1);
+    if (enc3 !== 64) output.push(chr2);
+    if (enc4 !== 64) output.push(chr3);
+  }
+  return new Uint8Array(output);
+}
+
 export default function PostCreateScreen() {
   const router = useRouter();
   const [feedType, setFeedType] = useState<FeedType>('일반');
@@ -45,6 +76,7 @@ export default function PostCreateScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.9,
+      base64: true,
       allowsMultipleSelection: true,
       selectionLimit: remaining,
     });
@@ -75,21 +107,23 @@ export default function PostCreateScreen() {
 
       const imageUrls: string[] = [];
       for (let i = 0; i < assets.length; i++) {
-        const uri = assets[i]?.uri;
+        const asset = assets[i];
+        const uri = asset?.uri;
         if (!uri) continue;
 
-        const path = `${user.id}/${ts}_${i}.jpg`;
-        const blob = await (await fetch(uri)).blob();
+        const storagePath = `${user.id}/${ts}_${i}.jpg`;
+        const base64 = asset?.base64;
+        if (!base64) throw new Error('사진 데이터를 읽을 수 없습니다. 다시 선택해주세요.');
 
-        const { error: uploadError } = await supabase.storage
-          .from('posts')
-          .upload(path, blob, {
-            contentType: assets[i]?.mimeType ?? 'image/jpeg',
-            upsert: false,
-          });
+        const byteArray = decodeBase64ToBytes(base64);
+
+        const { error: uploadError } = await supabase.storage.from('posts').upload(storagePath, byteArray, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
         if (uploadError) throw uploadError;
 
-        const { data } = supabase.storage.from('posts').getPublicUrl(path);
+        const { data } = supabase.storage.from('posts').getPublicUrl(storagePath);
         imageUrls.push(data.publicUrl);
       }
 

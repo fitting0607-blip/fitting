@@ -33,6 +33,8 @@ export default function PostDetailScreen() {
   const [loading, setLoading] = useState(false);
   const [post, setPost] = useState<PostRow | null>(null);
   const [displayUrls, setDisplayUrls] = useState<string[]>([]);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
     const list = (urls ?? []).filter(Boolean);
@@ -95,11 +97,59 @@ export default function PostDetailScreen() {
     };
   }, [postId, resolveImageUrls]);
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!mounted) return;
+        setMyUserId(user?.id ?? null);
+      } catch {
+        if (!mounted) return;
+        setMyUserId(null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const title = useMemo(() => {
     const nickname = post?.user?.nickname ? String(post.user.nickname) : '핏친';
     const mbti = post?.user?.mbti ? String(post.user.mbti) : '';
     return mbti ? `${nickname} · ${mbti}` : nickname;
   }, [post?.user?.mbti, post?.user?.nickname]);
+
+  const isMine = !!myUserId && !!post?.user_id && post.user_id === myUserId;
+
+  const deletePost = useCallback(async () => {
+    if (!postId) return;
+    if (!myUserId) {
+      Alert.alert('삭제 실패', '로그인이 필요합니다.');
+      return;
+    }
+    if (deleting) return;
+
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('posts').delete().eq('id', postId).eq('user_id', myUserId);
+      if (error) throw error;
+      router.back();
+    } catch (e: any) {
+      Alert.alert('삭제 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleting, myUserId, postId, router]);
+
+  const confirmDelete = useCallback(() => {
+    Alert.alert('게시물을 삭제하시겠어요?', undefined, [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => void deletePost() },
+    ]);
+  }, [deletePost]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -114,7 +164,20 @@ export default function PostDetailScreen() {
           <Feather name="chevron-left" size={24} color="#111111" />
         </Pressable>
         <Text style={styles.topTitle}>게시물</Text>
-        <View style={styles.topRightSpace} />
+        {isMine ? (
+          <Pressable
+            onPress={confirmDelete}
+            hitSlop={10}
+            style={styles.topIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="게시물 삭제"
+            disabled={deleting}
+          >
+            <Feather name="trash-2" size={20} color={deleting ? '#9CA3AF' : '#111111'} />
+          </Pressable>
+        ) : (
+          <View style={styles.topRightSpace} />
+        )}
       </View>
 
       {loading ? (
