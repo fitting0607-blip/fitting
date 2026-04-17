@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { supabase } from '../../supabase';
+import { useMatchModal } from '../hooks/useMatchModal';
 
 type FeedTab = '일반' | '바디';
 
@@ -56,6 +57,14 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_RATIO = 240 / 670;
 const MAX_FEED_WIDTH_WEB = 430;
 
+function getTodayRangeISO() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
@@ -74,7 +83,60 @@ export default function HomeScreen() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [composeModalVisible, setComposeModalVisible] = useState(false);
+  const [composeModalTitle, setComposeModalTitle] = useState('게시물을 작성하시겠어요?');
   const [openingProfile, setOpeningProfile] = useState(false);
+  const { MatchModal, openMatchModal } = useMatchModal();
+
+  const openComposeModalWithRemaining = useCallback(() => {
+    void (async () => {
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+        if (authError) throw authError;
+        if (!user?.id) throw new Error('로그인이 필요합니다.');
+
+        const { startISO, endISO } = getTodayRangeISO();
+
+        const [normalRes, bodyRes] = await Promise.all([
+          supabase
+            .from('posts')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('post_type', '일반')
+            .gte('created_at', startISO)
+            .lt('created_at', endISO),
+          supabase
+            .from('posts')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('post_type', '바디')
+            .gte('created_at', startISO)
+            .lt('created_at', endISO),
+        ]);
+
+        if (normalRes.error) throw normalRes.error;
+        if (bodyRes.error) throw bodyRes.error;
+
+        const normalCount = normalRes.count ?? 0;
+        const bodyCount = bodyRes.count ?? 0;
+
+        const normalRemaining = Math.max(0, 2 - normalCount);
+        const bodyRemaining = Math.max(0, 2 - bodyCount);
+
+        const normalPart =
+          normalRemaining > 0 ? `일반 ${normalRemaining}회 남음` : '일반 0회 남음, 10p 차감';
+        const bodyPart = bodyRemaining > 0 ? `바디 ${bodyRemaining}회 남음` : '바디 0회 남음, 10p 차감';
+
+        setComposeModalTitle(`게시물을 작성하시겠어요?\n(${normalPart} / ${bodyPart})`);
+        setComposeModalVisible(true);
+      } catch (e: any) {
+        setComposeModalTitle('게시물을 작성하시겠어요?');
+        setComposeModalVisible(true);
+      }
+    })();
+  }, []);
 
   const openUserProfileWithPoints = useCallback(
     (targetUserId: string) => {
@@ -336,7 +398,7 @@ export default function HomeScreen() {
                 {!thumb ? <View style={styles.photoPlaceholder} /> : null}
 
                 <Pressable
-                  onPress={() => Alert.alert('매칭권을 사용하시겠어요?')}
+                  onPress={() => openMatchModal(String(item.user_id ?? ''))}
                   hitSlop={10}
                   style={styles.dumbbellBtn}
                   accessibilityRole="button"
@@ -412,7 +474,7 @@ export default function HomeScreen() {
               ) : null}
 
               <Pressable
-                onPress={() => Alert.alert('매칭권을 사용하시겠어요?')}
+                onPress={() => openMatchModal(String(item.user_id ?? ''))}
                 style={styles.matchBtn}
                 accessibilityRole="button"
                 accessibilityLabel="매칭하기"
@@ -524,7 +586,7 @@ export default function HomeScreen() {
           </View>
 
           <Pressable
-            onPress={() => setComposeModalVisible(true)}
+            onPress={openComposeModalWithRemaining}
             style={styles.composeBtn}
             accessibilityRole="button"
             accessibilityLabel="게시물 작성"
@@ -544,7 +606,7 @@ export default function HomeScreen() {
           onPress={() => setComposeModalVisible(false)}
         >
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>게시물을 작성하시겠어요?</Text>
+            <Text style={styles.modalTitle}>{composeModalTitle}</Text>
             <Text style={styles.modalDesc}>일반 피드 하루 2회, 바디 피드 하루 2회 무료</Text>
 
             <Pressable
@@ -643,6 +705,8 @@ export default function HomeScreen() {
           windowSize={5}
         />
       )}
+
+      <MatchModal />
     </SafeAreaView>
   );
 }

@@ -6,6 +6,7 @@ import { Alert, Dimensions, FlatList, Pressable, StyleSheet, Text, View } from '
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '../supabase';
+import { useMatchModal } from './hooks/useMatchModal';
 
 type PublicUser = {
   id: string;
@@ -40,6 +41,7 @@ export default function UserProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ userId?: string }>();
   const userId = useMemo(() => String(params.userId ?? ''), [params.userId]);
+  const { MatchModal, openMatchModal } = useMatchModal();
 
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<PublicUser | null>(null);
@@ -280,7 +282,7 @@ export default function UserProfileScreen() {
 
       <View style={styles.bottomBar}>
         <Pressable
-          onPress={() => Alert.alert('매칭하기', '준비 중입니다.')}
+          onPress={() => openMatchModal(userId)}
           style={styles.matchBtn}
           accessibilityRole="button"
           accessibilityLabel="매칭하기"
@@ -288,6 +290,8 @@ export default function UserProfileScreen() {
           <Text style={styles.matchBtnText}>매칭하기</Text>
         </Pressable>
       </View>
+
+      <MatchModal />
     </SafeAreaView>
   );
 }
