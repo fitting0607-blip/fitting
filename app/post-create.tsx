@@ -21,7 +21,6 @@ import { supabase } from '../supabase';
 type FeedType = '일반' | '바디';
 
 const MAIN = '#3B3BF9';
-const MAX_IMAGES = 5;
 
 function decodeBase64ToBytes(base64: string) {
   const atobImpl: ((data: string) => string) | undefined = (globalThis as any)?.atob;
@@ -58,10 +57,10 @@ export default function PostCreateScreen() {
   const router = useRouter();
   const [feedType, setFeedType] = useState<FeedType>('일반');
   const [content, setContent] = useState('');
-  const [assets, setAssets] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [imageAsset, setImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = assets.length > 0 && !submitting;
+  const canSubmit = imageAsset != null && !submitting;
 
   const pickImages = useCallback(async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -70,25 +69,23 @@ export default function PostCreateScreen() {
       return;
     }
 
-    const remaining = Math.max(0, MAX_IMAGES - assets.length);
-    if (remaining === 0) return;
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.9,
       base64: true,
-      allowsMultipleSelection: true,
-      selectionLimit: remaining,
+      allowsMultipleSelection: false,
+      allowsEditing: true,
+      aspect: [4, 3],
     });
 
     if (result.canceled) return;
 
-    const next = [...assets, ...(result.assets ?? [])].slice(0, MAX_IMAGES);
-    setAssets(next);
-  }, [assets]);
+    const picked = result.assets?.[0];
+    if (picked) setImageAsset(picked);
+  }, []);
 
-  const removeAt = useCallback((idx: number) => {
-    setAssets((prev) => prev.filter((_, i) => i !== idx));
+  const clearImage = useCallback(() => {
+    setImageAsset(null);
   }, []);
 
   const uploadAndCreate = useCallback(async () => {
@@ -105,27 +102,22 @@ export default function PostCreateScreen() {
 
       const ts = Date.now();
 
-      const imageUrls: string[] = [];
-      for (let i = 0; i < assets.length; i++) {
-        const asset = assets[i];
-        const uri = asset?.uri;
-        if (!uri) continue;
+      if (!imageAsset?.uri) throw new Error('사진을 선택해주세요.');
 
-        const storagePath = `${user.id}/${ts}_${i}.jpg`;
-        const base64 = asset?.base64;
-        if (!base64) throw new Error('사진 데이터를 읽을 수 없습니다. 다시 선택해주세요.');
+      const storagePath = `${user.id}/${ts}_0.jpg`;
+      const base64 = imageAsset.base64;
+      if (!base64) throw new Error('사진 데이터를 읽을 수 없습니다. 다시 선택해주세요.');
 
-        const byteArray = decodeBase64ToBytes(base64);
+      const byteArray = decodeBase64ToBytes(base64);
 
-        const { error: uploadError } = await supabase.storage.from('posts').upload(storagePath, byteArray, {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-        if (uploadError) throw uploadError;
+      const { error: uploadError } = await supabase.storage.from('posts').upload(storagePath, byteArray, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+      if (uploadError) throw uploadError;
 
-        const { data } = supabase.storage.from('posts').getPublicUrl(storagePath);
-        imageUrls.push(data.publicUrl);
-      }
+      const { data } = supabase.storage.from('posts').getPublicUrl(storagePath);
+      const imageUrls = [data.publicUrl];
 
       const { error: insertError } = await supabase.from('posts').insert({
         user_id: user.id,
@@ -141,7 +133,7 @@ export default function PostCreateScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [assets, canSubmit, content, feedType, router]);
+  }, [imageAsset, canSubmit, content, feedType, router]);
 
   const nextTextStyle = useMemo(
     () => [styles.nextText, canSubmit ? styles.nextTextActive : styles.nextTextDisabled],
@@ -188,22 +180,20 @@ export default function PostCreateScreen() {
               accessibilityLabel="사진 선택"
             >
               <Feather name="camera" size={20} color="#111111" />
-              <Text style={styles.countText}>
-                {assets.length}/{MAX_IMAGES}
-              </Text>
+              <Text style={styles.countText}>사진 선택</Text>
             </Pressable>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.thumbScroll}>
-              {assets.map((a, idx) => (
-                <View key={`${a.uri}-${idx}`} style={styles.thumbWrap}>
+              {imageAsset ? (
+                <View key={imageAsset.uri} style={styles.thumbWrap}>
                   <Image
-                    source={{ uri: a.uri }}
+                    source={{ uri: imageAsset.uri }}
                     style={styles.thumbImage}
                     contentFit="cover"
                     transition={120}
                   />
                   <Pressable
-                    onPress={() => removeAt(idx)}
+                    onPress={clearImage}
                     style={styles.removeBtn}
                     hitSlop={10}
                     accessibilityRole="button"
@@ -212,7 +202,7 @@ export default function PostCreateScreen() {
                     <Feather name="x" size={14} color="#FFFFFF" />
                   </Pressable>
                 </View>
-              ))}
+              ) : null}
             </ScrollView>
           </View>
 

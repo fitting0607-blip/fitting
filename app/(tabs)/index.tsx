@@ -89,9 +89,14 @@ export default function HomeScreen() {
     return cardHeight > 0 ? Math.round(cardHeight * 0.72) : 0;
   }, [cardHeight]);
 
+  const cardWidth = useMemo(() => {
+    return feedListWidth > 0 ? Math.floor(feedListWidth) : 0;
+  }, [feedListWidth]);
+
   const loadBanners = useCallback(async (): Promise<Banner[]> => {
     // TODO: Supabase 연동 예정
-    return [];
+    // Temporary dummy banner (design reference)
+    return [{ id: 'dummy_event', titleTop: 'EVENT', titleMain: '' }];
   }, []);
 
   const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
@@ -233,10 +238,6 @@ export default function HomeScreen() {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
-  const cardWidth = useMemo(() => {
-    return feedListWidth > 0 ? Math.floor(feedListWidth) : 0;
-  }, [feedListWidth]);
-
   const renderCard = useCallback(
     ({ item }: { item: PostFeedRow }) => {
       if (cardWidth === 0 || cardHeight === 0 || photoHeight === 0) return null;
@@ -262,46 +263,50 @@ export default function HomeScreen() {
       const tagsToShow = expanded ? tagsAll : [];
 
       return (
-        <View style={[styles.cardWrap, { width: cardWidth }]}>
-          <View style={[styles.card, { height: cardHeight }]}>
-            <View style={[styles.photoArea, { width: cardWidth, height: photoHeight }]}>
-              {thumb ? (
-                <RNImage
-                  source={{ uri: thumb }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="contain"
-                />
-              ) : null}
-              {!thumb ? <View style={styles.photoPlaceholder} /> : null}
+        <View style={{ width: cardWidth }}>
+          <View style={[styles.cardShell, { width: cardWidth, height: cardHeight }]}>
+            <ScrollView
+              style={{ height: cardHeight }}
+              contentContainerStyle={styles.cardScrollContent}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              bounces={false}
+            >
+              <View style={[styles.photoArea, { width: cardWidth, height: photoHeight }]}>
+                {thumb ? (
+                  <RNImage
+                    source={{ uri: thumb }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="contain"
+                  />
+                ) : null}
+                {!thumb ? <View style={styles.photoPlaceholder} /> : null}
 
-              <Pressable
-                onPress={() => Alert.alert('매칭권을 사용하시겠어요?')}
-                hitSlop={10}
-                style={styles.dumbbellBtn}
-                accessibilityRole="button"
-                accessibilityLabel="매칭권 사용"
-              >
-                <MaterialCommunityIcons name="dumbbell" size={24} color="#FFFFFF" />
-              </Pressable>
+                <Pressable
+                  onPress={() => Alert.alert('매칭권을 사용하시겠어요?')}
+                  hitSlop={10}
+                  style={styles.dumbbellBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="매칭권 사용"
+                >
+                  <MaterialCommunityIcons name="dumbbell" size={24} color="#FFFFFF" />
+                </Pressable>
 
-              <Pressable
-                onPress={() => toggleLike(id)}
-                hitSlop={10}
-                style={styles.heartBtn}
-                accessibilityRole="button"
-                accessibilityLabel="하트"
-              >
-                <Feather name="heart" size={20} color={likedIds[id] ? '#FF3B30' : '#BDBDBD'} />
-              </Pressable>
-            </View>
+                <Pressable
+                  onPress={() => toggleLike(id)}
+                  hitSlop={10}
+                  style={styles.heartBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="하트"
+                >
+                  <Feather name="heart" size={20} color={likedIds[id] ? '#FF3B30' : '#BDBDBD'} />
+                </Pressable>
+              </View>
 
-            <View style={styles.infoArea}>
-              {item.content?.trim() ? (
-                <Text style={styles.cardContent} numberOfLines={2}>
-                  {item.content}
-                </Text>
-              ) : null}
+              {/* 게시물 글 */}
+              {item.content?.trim() ? <Text style={styles.cardContent}>{item.content}</Text> : null}
 
+              {/* 닉네임 · MBTI + 프로필/확장 */}
               <View style={styles.infoTopRow}>
                 <Text style={styles.userTitle} numberOfLines={1}>
                   {title}
@@ -331,12 +336,7 @@ export default function HomeScreen() {
               </View>
 
               {expanded ? (
-                <ScrollView
-                  style={styles.tagsScroll}
-                  contentContainerStyle={styles.tagsRow}
-                  showsVerticalScrollIndicator={false}
-                  scrollEnabled
-                >
+                <View style={styles.tagsRow}>
                   {tagsToShow.length === 0 ? (
                     <View style={styles.tagPill}>
                       <Text style={styles.tagText}>태그 없음</Text>
@@ -355,9 +355,18 @@ export default function HomeScreen() {
                       </View>
                     ))
                   )}
-                </ScrollView>
+                </View>
               ) : null}
-            </View>
+
+              <Pressable
+                onPress={() => Alert.alert('매칭권을 사용하시겠어요?')}
+                style={styles.matchBtn}
+                accessibilityRole="button"
+                accessibilityLabel="매칭하기"
+              >
+                <Text style={styles.matchBtnText}>매칭하기</Text>
+              </Pressable>
+            </ScrollView>
           </View>
         </View>
       );
@@ -376,7 +385,7 @@ export default function HomeScreen() {
       >
         <View style={styles.bannerLeft}>
           <Text style={styles.bannerEvent}>{item.titleTop}</Text>
-          <Text style={styles.bannerTitle}>{item.titleMain}</Text>
+          {item.titleMain ? <Text style={styles.bannerTitle}>{item.titleMain}</Text> : null}
         </View>
 
         <View style={styles.bannerRight}>
@@ -407,69 +416,69 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View
-        style={styles.header}
-        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
-      >
-        <Pressable
-          onPress={() => {}}
-          hitSlop={10}
-          style={styles.headerIconBtn}
-          accessibilityRole="button"
-          accessibilityLabel="상점"
+        <View
+          style={styles.header}
+          onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
         >
-          <Feather name="award" size={22} color="#111111" />
-        </Pressable>
-
-        <Text style={styles.headerTitle}>fitting</Text>
-
-        <Pressable
-          onPress={() => {}}
-          hitSlop={10}
-          style={styles.headerIconBtn}
-          accessibilityRole="button"
-          accessibilityLabel="알림"
-        >
-          <Feather name="bell" size={22} color="#111111" />
-        </Pressable>
-      </View>
-
-      <View
-        style={styles.feedBar}
-        onLayout={(e) => setFeedBarHeight(e.nativeEvent.layout.height)}
-      >
-        <View style={styles.tabs}>
-          <Pressable onPress={() => setSelectedTab('일반')} hitSlop={10}>
-            <Text
-              style={[
-                styles.tabText,
-                selectedTab === '일반' ? styles.tabActive : styles.tabInactive,
-              ]}
-            >
-              일반
-            </Text>
+          <Pressable
+            onPress={() => {}}
+            hitSlop={10}
+            style={styles.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="상점"
+          >
+            <Feather name="award" size={22} color="#111111" />
           </Pressable>
-          <Pressable onPress={() => setSelectedTab('바디')} hitSlop={10}>
-            <Text
-              style={[
-                styles.tabText,
-                selectedTab === '바디' ? styles.tabActive : styles.tabInactive,
-              ]}
-            >
-              바디
-            </Text>
+
+          <Text style={styles.headerTitle}>fitting</Text>
+
+          <Pressable
+            onPress={() => {}}
+            hitSlop={10}
+            style={styles.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="알림"
+          >
+            <Feather name="bell" size={22} color="#111111" />
           </Pressable>
         </View>
 
-        <Pressable
-          onPress={() => setComposeModalVisible(true)}
-          style={styles.composeBtn}
-          accessibilityRole="button"
-          accessibilityLabel="게시물 작성"
+        <View
+          style={styles.feedBar}
+          onLayout={(e) => setFeedBarHeight(e.nativeEvent.layout.height)}
         >
-          <Feather name="edit-2" size={18} color="#FFFFFF" />
-        </Pressable>
-      </View>
+          <View style={styles.tabs}>
+            <Pressable onPress={() => setSelectedTab('일반')} hitSlop={10}>
+              <Text
+                style={[
+                  styles.tabText,
+                  selectedTab === '일반' ? styles.tabActive : styles.tabInactive,
+                ]}
+              >
+                일반
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => setSelectedTab('바디')} hitSlop={10}>
+              <Text
+                style={[
+                  styles.tabText,
+                  selectedTab === '바디' ? styles.tabActive : styles.tabInactive,
+                ]}
+              >
+                바디
+              </Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={() => setComposeModalVisible(true)}
+            style={styles.composeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="게시물 작성"
+          >
+            <Feather name="edit-2" size={18} color="#FFFFFF" />
+          </Pressable>
+        </View>
 
       <Modal
         visible={composeModalVisible}
@@ -562,10 +571,11 @@ export default function HomeScreen() {
             return renderCard(info);
           }}
           style={styles.feedList}
-          contentContainerStyle={styles.feedListContent}
+          contentContainerStyle={[styles.feedListContent, { paddingBottom: 100 }]}
           onLayout={(e) => {
             const w = e.nativeEvent.layout.width;
-            setFeedListWidth(Platform.OS === 'web' ? Math.min(w, MAX_FEED_WIDTH_WEB) : w);
+            // Only constrain width on web; on native, FlatList width should match the viewport width.
+            setFeedListWidth(Platform.OS === 'web' ? Math.min(w, MAX_FEED_WIDTH_WEB) : Math.floor(w));
             console.log('[HomeFeed] FlatList layout', {
               w,
               h: e.nativeEvent.layout.height,
@@ -651,7 +661,7 @@ const styles = StyleSheet.create({
   bannerCard: {
     width: SCREEN_WIDTH - 32,
     borderRadius: 18,
-    backgroundColor: '#5B3BE6',
+    backgroundColor: '#5B4FE9',
     overflow: 'hidden',
     paddingHorizontal: 16,
     paddingTop: 14,
@@ -728,15 +738,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  cardWrap: {
-    paddingHorizontal: 16,
-  },
-  card: {
+  cardShell: {
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#EEEEEE',
+    position: 'relative',
   },
   photoArea: {
     backgroundColor: '#000000',
@@ -765,6 +773,7 @@ const styles = StyleSheet.create({
     backgroundColor: MAIN,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 5,
   },
   heartBtn: {
     position: 'absolute',
@@ -776,16 +785,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 6,
   },
 
-  infoArea: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 6,
-    paddingBottom: 14,
-  },
   cardContent: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 10,
     paddingBottom: 8,
     fontSize: 15,
     fontWeight: '600',
@@ -848,10 +853,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 6,
   },
-  tagsScroll: {
-    paddingTop: 10,
-    maxHeight: 120,
-  },
   tagPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -865,6 +866,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     fontWeight: '700',
+  },
+  matchBtn: {
+    backgroundColor: MAIN,
+    borderRadius: 12,
+    marginHorizontal: 14,
+    marginVertical: 12,
+    paddingTop: 14,
+    paddingBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
 
   emptyWrap: {
@@ -887,6 +903,10 @@ const styles = StyleSheet.create({
   },
   feedListContent: {
     paddingBottom: 16,
+  },
+
+  cardScrollContent: {
+    paddingBottom: 80,
   },
 
   modalBackdrop: {
