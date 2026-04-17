@@ -65,9 +65,3 @@
 - app/user-profile.tsx
 - app/matching.ts
 - app/hooks/useMatchModal.tsx
-
-## 다음 할 것 (우선순위 순)
-1. 리워드 탭
-2. 지도 탭 고도화
-3. 결제 연동
-4. 배포 전 RLS 전체 적용
