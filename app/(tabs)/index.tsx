@@ -74,6 +74,59 @@ export default function HomeScreen() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const [composeModalVisible, setComposeModalVisible] = useState(false);
+  const [openingProfile, setOpeningProfile] = useState(false);
+
+  const openUserProfileWithPoints = useCallback(
+    (targetUserId: string) => {
+      if (!targetUserId) return;
+      Alert.alert('프로필을 열람하시겠어요?', '10포인트가 차감됩니다.', [
+        { text: '안할래요', style: 'cancel' },
+        {
+          text: '사용할게요',
+          onPress: () => {
+            void (async () => {
+              if (openingProfile) return;
+              setOpeningProfile(true);
+              try {
+                const {
+                  data: { user },
+                  error: authError,
+                } = await supabase.auth.getUser();
+                if (authError) throw authError;
+                if (!user?.id) throw new Error('로그인이 필요합니다.');
+
+                const { data: me, error: meError } = await supabase
+                  .from('users')
+                  .select('points')
+                  .eq('id', user.id)
+                  .maybeSingle();
+                if (meError) throw meError;
+
+                const currentPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
+                if (currentPoints < 10) {
+                  Alert.alert('포인트 부족', '포인트가 부족해서 프로필을 열람할 수 없어요.');
+                  return;
+                }
+
+                const { error: updateError } = await supabase
+                  .from('users')
+                  .update({ points: currentPoints - 10 })
+                  .eq('id', user.id);
+                if (updateError) throw updateError;
+
+                router.push({ pathname: '/user-profile', params: { userId: targetUserId } });
+              } catch (e: any) {
+                Alert.alert('처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+              } finally {
+                setOpeningProfile(false);
+              }
+            })();
+          },
+        },
+      ]);
+    },
+    [openingProfile, router]
+  );
 
   const bannerHeight = useMemo(() => {
     return bannerWidth > 0 ? Math.round(bannerWidth * BANNER_RATIO) : 0;
@@ -314,7 +367,7 @@ export default function HomeScreen() {
 
                 <View style={styles.infoRight}>
                   <Pressable
-                    onPress={() => {}}
+                    onPress={() => openUserProfileWithPoints(String(item.user_id ?? ''))}
                     style={styles.profileBtn}
                     accessibilityRole="button"
                     accessibilityLabel="프로필 보기"
