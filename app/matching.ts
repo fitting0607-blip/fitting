@@ -1,8 +1,7 @@
 import { Alert } from 'react-native';
+import { router } from 'expo-router';
 
 import { supabase } from '../supabase';
-
-type MatchStatus = 'pending' | 'matched';
 
 let matchRequestInFlight = false;
 
@@ -46,24 +45,12 @@ export async function getMatchDailyFreeRemaining() {
 async function hasAlreadyRequested(requesterId: string, targetId: string) {
   const { data, error } = await supabase
     .from('matches')
-    .select('id,status')
+    .select('id')
     .eq('requester_id', requesterId)
     .eq('target_id', targetId)
     .limit(1);
   if (error) throw error;
   return (data?.length ?? 0) > 0;
-}
-
-async function getPendingIncomingMatchId(targetId: string, myId: string) {
-  const { data, error } = await supabase
-    .from('matches')
-    .select('id')
-    .eq('requester_id', targetId)
-    .eq('target_id', myId)
-    .eq('status', 'pending')
-    .maybeSingle();
-  if (error) throw error;
-  return (data as any)?.id ? String((data as any).id) : null;
 }
 
 async function consumeTicketIfNeeded(myId: string, todaySentCount: number) {
@@ -104,23 +91,50 @@ function showFreeRemainingAlert(todaySentCountBeforeThis: number) {
   }
 }
 
+function getFreeRemainingMessage(todaySentCountBeforeThis: number) {
+  if (todaySentCountBeforeThis === 0) return '일일 무료 매칭권 2회 남았어요';
+  if (todaySentCountBeforeThis === 1) return '일일 무료 매칭권 1회 남았어요';
+  return null;
+}
+
+async function getUserNickname(userId: string) {
+  if (!userId) return '상대';
+  const { data, error } = await supabase.from('users').select('nickname').eq('id', userId).maybeSingle();
+  if (error) return '상대';
+  const nick = (data as any)?.nickname;
+  return nick ? String(nick) : '상대';
+}
+
 async function createMatchRequest(myId: string, targetId: string) {
   const { data, error } = await supabase
     .from('matches')
     .insert({
       requester_id: myId,
       target_id: targetId,
-      status: 'pending' satisfies MatchStatus,
     })
     .select('id')
     .single();
   if (error) throw error;
-  return String((data as any)?.id);
-}
 
-async function updateMatchesToMatched(ids: string[]) {
-  const { error } = await supabase.from('matches').update({ status: 'matched' }).in('id', ids);
-  if (error) throw error;
+  const matchId = String((data as any)?.id ?? '');
+  if (!matchId) throw new Error('매칭 생성에 실패했어요.');
+
+  // 2) chat_rooms INSERT right after match is created
+  const { data: room, error: roomError } = await supabase
+    .from('chat_rooms')
+    .insert({ match_id: matchId })
+    .select('id')
+    .single();
+  if (roomError) {
+    // Best-effort rollback so we don't leave a match without a room.
+    await supabase.from('matches').delete().eq('id', matchId);
+    throw roomError;
+  }
+
+  const roomId = String((room as any)?.id ?? '');
+  if (!roomId) throw new Error('채팅방 생성에 실패했어요.');
+
+  return { matchId, roomId };
 }
 
 export async function runMatchRequest(
@@ -148,19 +162,20 @@ export async function runMatchRequest(
 
     await consumeTicketIfNeeded(myId, todaySentCountBeforeThis);
 
-    const incomingPendingId = await getPendingIncomingMatchId(targetUserId, myId);
+    const { roomId } = await createMatchRequest(myId, targetUserId);
+    const nickname = await getUserNickname(targetUserId);
 
-    const myMatchId = await createMatchRequest(myId, targetUserId);
+    const freeMsg = getFreeRemainingMessage(todaySentCountBeforeThis);
+    const message = freeMsg ? `${freeMsg}\n채팅방으로 이동할게요.` : '채팅방으로 이동할게요.';
 
-    showFreeRemainingAlert(todaySentCountBeforeThis);
-
-    if (incomingPendingId) {
-      await updateMatchesToMatched([incomingPendingId, myMatchId]);
-      Alert.alert('매칭이 완료됐어요! 채팅을 시작해보세요');
-      return;
-    }
-
-    Alert.alert('매칭 요청을 보냈어요!');
+    Alert.alert('매칭이 완료됐어요! 채팅을 시작해보세요', message, [
+      {
+        text: '확인',
+        onPress: () => {
+          router.push({ pathname: '/chat-room', params: { roomId, nickname } });
+        },
+      },
+    ]);
   } catch (e: any) {
     if (e?.message === 'NO_TICKET') return;
     Alert.alert('처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
