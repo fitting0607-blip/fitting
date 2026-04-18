@@ -19,6 +19,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { supabase } from '../../supabase';
 import { useMatchModal } from '../hooks/useMatchModal';
+import { usePostLike } from '../hooks/usePostLike';
 
 type FeedTab = '일반' | '바디';
 
@@ -77,7 +78,7 @@ export default function HomeScreen() {
   const [feedBarHeight, setFeedBarHeight] = useState(0);
   const [bannerWrapHeight, setBannerWrapHeight] = useState(0);
 
-  const [likedIds, setLikedIds] = useState<Record<string, boolean>>({});
+  const { likedIds, loadMyLikesForPostIds, handleToggleLike, LikeModal } = usePostLike();
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -175,6 +176,13 @@ export default function HomeScreen() {
                   .update({ points: currentPoints - 10 })
                   .eq('id', user.id);
                 if (updateError) throw updateError;
+
+                const { error: logError } = await supabase.from('point_logs').insert({
+                  user_id: user.id,
+                  amount: -10,
+                  reason: 'profile_view',
+                });
+                if (logError) throw logError;
 
                 router.push({ pathname: '/user-profile', params: { userId: targetUserId } });
               } catch (e: any) {
@@ -310,6 +318,11 @@ export default function HomeScreen() {
         })
       );
       setPosts(resolved);
+
+      const postIds = resolved
+        .map((p) => String(p.id ?? '').trim())
+        .filter((pid) => pid.length > 0);
+      await loadMyLikesForPostIds(postIds, myId);
       console.log('[HomeFeed] posts resolved', {
         count: resolved.length,
         sampleThumb: resolved[0]?.display_image_urls?.[0] ?? null,
@@ -317,10 +330,11 @@ export default function HomeScreen() {
     } catch (e: any) {
       console.log('[HomeFeed] loadFeedPosts failed', e?.message ?? e);
       setPosts([]);
+      await loadMyLikesForPostIds([], null);
     } finally {
       setLoading(false);
     }
-  }, [resolveImageUrls, selectedTab]);
+  }, [loadMyLikesForPostIds, resolveImageUrls, selectedTab]);
 
   useEffect(() => {
     void loadFeedPosts();
@@ -344,10 +358,6 @@ export default function HomeScreen() {
       mounted = false;
     };
   }, [loadBanners]);
-
-  const toggleLike = useCallback((id: string) => {
-    setLikedIds((prev) => ({ ...prev, [id]: !prev[id] }));
-  }, []);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -408,7 +418,7 @@ export default function HomeScreen() {
                 </Pressable>
 
                 <Pressable
-                  onPress={() => toggleLike(id)}
+                  onPress={() => void handleToggleLike(id, String(item.user_id ?? ''))}
                   hitSlop={10}
                   style={styles.heartBtn}
                   accessibilityRole="button"
@@ -486,7 +496,17 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [cardHeight, cardWidth, expandedIds, likedIds, photoHeight, toggleExpanded, toggleLike]
+    [
+      cardHeight,
+      cardWidth,
+      expandedIds,
+      likedIds,
+      photoHeight,
+      toggleExpanded,
+      handleToggleLike,
+      openMatchModal,
+      openUserProfileWithPoints,
+    ]
   );
 
   const renderBanner = useCallback(({ item }: { item: Banner }) => {
@@ -705,6 +725,8 @@ export default function HomeScreen() {
           windowSize={5}
         />
       )}
+
+      <LikeModal />
 
       <MatchModal />
     </SafeAreaView>
@@ -1060,6 +1082,7 @@ const styles = StyleSheet.create({
     backgroundColor: MAIN,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
   modalPrimaryBtnText: {
     color: '#FFFFFF',

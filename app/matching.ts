@@ -163,6 +163,26 @@ export async function runMatchRequest(
     await consumeTicketIfNeeded(myId, todaySentCountBeforeThis);
 
     const { roomId } = await createMatchRequest(myId, targetUserId);
+
+    const { data: meAfterMatch, error: mePointsError } = await supabase
+      .from('users')
+      .select('points')
+      .eq('id', myId)
+      .maybeSingle();
+    if (mePointsError) throw mePointsError;
+    const prevPoints = typeof (meAfterMatch as any)?.points === 'number' ? (meAfterMatch as any).points : 0;
+    const { error: rewardError } = await supabase
+      .from('users')
+      .update({ points: prevPoints + 5 })
+      .eq('id', myId);
+    if (rewardError) throw rewardError;
+    const { error: matchLogError } = await supabase.from('point_logs').insert({
+      user_id: myId,
+      amount: 5,
+      reason: 'match_request',
+    });
+    if (matchLogError) throw matchLogError;
+
     const nickname = await getUserNickname(targetUserId);
 
     const freeMsg = getFreeRemainingMessage(todaySentCountBeforeThis);

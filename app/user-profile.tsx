@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '../supabase';
 import { useMatchModal } from './hooks/useMatchModal';
+import { usePostLike } from './hooks/usePostLike';
 
 type PublicUser = {
   id: string;
@@ -42,7 +43,9 @@ export default function UserProfileScreen() {
   const params = useLocalSearchParams<{ userId?: string }>();
   const userId = useMemo(() => String(params.userId ?? ''), [params.userId]);
   const { MatchModal, openMatchModal } = useMatchModal();
+  const { likedIds, loadMyLikesForPostIds, handleToggleLike, LikeModal } = usePostLike();
 
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<PublicUser | null>(null);
   const [posts, setPosts] = useState<PostRowResolved[]>([]);
@@ -77,6 +80,12 @@ export default function UserProfileScreen() {
     (async () => {
       setLoading(true);
       try {
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
+        const myId = authUser?.id ?? null;
+        setViewerId(myId);
+
         const { data: u, error: uError } = await supabase
           .from('users')
           .select('id,nickname,mbti,profile_image_url,sports,workout_goals,workout_frequency')
@@ -111,12 +120,19 @@ export default function UserProfileScreen() {
         setPosts(resolved);
         setCountNormal(n);
         setCountBody(b);
+
+        const postIds = list
+          .map((row) => String(row.id ?? '').trim())
+          .filter((pid) => pid.length > 0);
+        await loadMyLikesForPostIds(postIds, myId);
       } catch (e: any) {
         if (!mounted) return;
         setUser(null);
         setPosts([]);
         setCountNormal(0);
         setCountBody(0);
+        setViewerId(null);
+        void loadMyLikesForPostIds([], null);
         Alert.alert('불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       } finally {
         if (mounted) setLoading(false);
@@ -126,7 +142,7 @@ export default function UserProfileScreen() {
     return () => {
       mounted = false;
     };
-  }, [resolveImageUrls, userId]);
+  }, [loadMyLikesForPostIds, resolveImageUrls, userId]);
 
   const title = useMemo(() => {
     const nickname = user?.nickname ? String(user.nickname) : loading ? '불러오는 중…' : '사용자';
@@ -145,6 +161,8 @@ export default function UserProfileScreen() {
   const filteredPosts = useMemo(() => {
     return posts.filter((p) => p.post_type === feedTab);
   }, [feedTab, posts]);
+
+  const showLikeOnPosts = Boolean(viewerId && userId && viewerId !== userId);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -261,19 +279,34 @@ export default function UserProfileScreen() {
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
               const thumb = item.display_image_urls?.[0] ?? null;
+              const postKey = String(item.id ?? '');
+              const liked = !!likedIds[postKey];
               return (
-                <Pressable
-                  style={styles.gridItem}
-                  onPress={() => router.push({ pathname: '/post-detail', params: { id: item.id } })}
-                  accessibilityRole="button"
-                  accessibilityLabel="게시물 썸네일"
-                >
-                  {thumb ? (
-                    <Image source={{ uri: thumb }} style={styles.gridImage} contentFit="cover" transition={120} />
-                  ) : (
-                    <View style={styles.gridPlaceholder} />
-                  )}
-                </Pressable>
+                <View style={styles.gridCell}>
+                  <Pressable
+                    style={styles.gridItem}
+                    onPress={() => router.push({ pathname: '/post-detail', params: { id: item.id } })}
+                    accessibilityRole="button"
+                    accessibilityLabel="게시물 썸네일"
+                  >
+                    {thumb ? (
+                      <Image source={{ uri: thumb }} style={styles.gridImage} contentFit="cover" transition={120} />
+                    ) : (
+                      <View style={styles.gridPlaceholder} />
+                    )}
+                  </Pressable>
+                  {showLikeOnPosts ? (
+                    <Pressable
+                      onPress={() => void handleToggleLike(postKey, userId)}
+                      hitSlop={8}
+                      style={styles.gridHeartBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="좋아요"
+                    >
+                      <Feather name="heart" size={16} color={liked ? '#FF3B30' : '#BDBDBD'} />
+                    </Pressable>
+                  ) : null}
+                </View>
               );
             }}
           />
@@ -291,6 +324,7 @@ export default function UserProfileScreen() {
         </Pressable>
       </View>
 
+      <LikeModal />
       <MatchModal />
     </SafeAreaView>
   );
@@ -454,11 +488,28 @@ const styles = StyleSheet.create({
     gap: GRID_GAP,
     marginBottom: GRID_GAP,
   },
-  gridItem: {
+  gridCell: {
     width: GRID_ITEM,
     height: GRID_ITEM,
+    position: 'relative',
+  },
+  gridItem: {
+    width: '100%',
+    height: '100%',
     overflow: 'hidden',
     backgroundColor: '#E5E7EB',
+  },
+  gridHeartBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   gridImage: {
     width: '100%',
