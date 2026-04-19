@@ -1,3 +1,5 @@
+import { grantAttendanceIfNeededOnLogin } from '@/attendance-helpers';
+import { enqueueLoginAttendanceModal } from '@/login-attendance-pending';
 import type { Dispatch, SetStateAction } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -140,6 +142,11 @@ export function AgeStep({
         return;
       }
       console.log('[age] update 성공');
+
+      const attendance = await grantAttendanceIfNeededOnLogin(userId);
+      if (attendance.granted) {
+        enqueueLoginAttendanceModal(attendance.pointsAwarded);
+      }
 
       // 5. 완료
       console.log('[age] onDone 호출');
