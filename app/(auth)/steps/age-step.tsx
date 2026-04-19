@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { decodeBase64ToBytes, PUBLIC_UPLOAD_BUCKET } from '../../utils/imageBytes';
 import type { RegisterDraft } from './types';
 import { PrimaryButton } from './components';
 import { layoutStyles } from './ui';
@@ -95,7 +96,29 @@ export function AgeStep({
         return;
       }
 
-      // 3. public.users 업데이트
+      // 3. 프로필 사진: 가입 후 세션이 있을 때만 Storage 업로드 (posts 버킷)
+      let profileImageUrl: string | null = draft.profile_image_url ?? null;
+      if (draft.profile_image_base64) {
+        const storagePath = `${userId}/profile_${Date.now()}.jpg`;
+        const byteArray = decodeBase64ToBytes(draft.profile_image_base64);
+        const { error: uploadError } = await supabase.storage.from(PUBLIC_UPLOAD_BUCKET).upload(storagePath, byteArray, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+        if (uploadError) {
+          console.log('[age] profile upload 에러:', uploadError.message);
+          Alert.alert('프로필 사진 업로드 실패', uploadError.message);
+          return;
+        }
+        const { data: pub } = supabase.storage.from(PUBLIC_UPLOAD_BUCKET).getPublicUrl(storagePath);
+        profileImageUrl = pub?.publicUrl ?? null;
+        if (!profileImageUrl) {
+          Alert.alert('오류', '프로필 이미지 URL을 만들 수 없습니다.');
+          return;
+        }
+      }
+
+      // 4. public.users 업데이트
       console.log('[age] users update 시작');
       const { error: updateError } = await supabase
         .from('users')
@@ -107,7 +130,7 @@ export function AgeStep({
           sports: draft.sports,
           workout_goals: draft.workout_goals,
           workout_frequency: draft.workout_frequency,
-          profile_image_url: draft.profile_image_url ?? null,
+          profile_image_url: profileImageUrl,
         })
         .eq('id', userId);
 
@@ -118,7 +141,7 @@ export function AgeStep({
       }
       console.log('[age] update 성공');
 
-      // 4. 완료
+      // 5. 완료
       console.log('[age] onDone 호출');
       onDone();
     } finally {

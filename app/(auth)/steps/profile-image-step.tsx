@@ -5,41 +5,14 @@ import type { RegisterDraft } from './types';
 import { PrimaryButton } from './components';
 import { COLORS, layoutStyles } from './ui';
 
-async function uploadAvatarToSupabase({
-  supabase,
-  uri,
-}: {
-  supabase: any;
-  uri: string;
-}): Promise<string> {
-  const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-  const filename = `draft_${Date.now()}.${ext}`;
-
-  const res = await fetch(uri);
-  const blob = await res.blob();
-
-  const { error: uploadError } = await supabase.storage.from('avatars').upload(filename, blob, {
-    contentType: blob.type || `image/${ext}`,
-    upsert: true,
-  });
-
-  if (uploadError) throw uploadError;
-
-  const { data } = supabase.storage.from('avatars').getPublicUrl(filename);
-  if (!data?.publicUrl) throw new Error('프로필 이미지 URL 생성에 실패했습니다.');
-  return data.publicUrl;
-}
-
 export function ProfileImageStep({
   draft,
   setDraft,
-  supabase,
   onNext,
   onLoadingChange,
 }: {
   draft: RegisterDraft;
   setDraft: React.Dispatch<React.SetStateAction<RegisterDraft>>;
-  supabase: any;
   onNext: () => void;
   onLoadingChange: (loading: boolean) => void;
 }) {
@@ -54,18 +27,24 @@ export function ProfileImageStep({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.9,
+      base64: true,
     });
 
     if (result.canceled) return;
-    const uri = result.assets?.[0]?.uri;
-    if (!uri) return;
+    const base64 = result.assets?.[0]?.base64;
+    if (!base64) {
+      Alert.alert('오류', '사진 데이터를 읽을 수 없습니다. 다시 선택해 주세요.');
+      return;
+    }
 
     onLoadingChange(true);
     try {
-      const url = await uploadAvatarToSupabase({ supabase, uri });
-      setDraft((prev) => ({ ...prev, profile_image_url: url }));
-    } catch (e) {
-      Alert.alert('업로드 실패', e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');
+      // Storage 업로드는 가입 완료(세션 확보) 후 age-step에서 수행
+      setDraft((prev) => ({
+        ...prev,
+        profile_image_base64: base64,
+        profile_image_url: null,
+      }));
     } finally {
       onLoadingChange(false);
     }
@@ -87,18 +66,18 @@ export function ProfileImageStep({
           }}
         >
           <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>
-            {draft.profile_image_url ? '사진이 선택되었습니다 (다시 선택)' : '사진 선택하기'}
+            {draft.profile_image_base64 ? '사진이 선택되었습니다 (다시 선택)' : '사진 선택하기'}
           </Text>
-          {draft.profile_image_url ? (
-            <Text style={{ marginTop: 6, fontSize: 12, color: COLORS.subtext }} numberOfLines={2}>
-              {draft.profile_image_url}
+          {draft.profile_image_base64 ? (
+            <Text style={{ marginTop: 6, fontSize: 12, color: COLORS.subtext }}>
+              가입 완료 시 프로필에 반영돼요
             </Text>
           ) : null}
         </Pressable>
 
         <Pressable
           onPress={() => {
-            setDraft((prev) => ({ ...prev, profile_image_url: null }));
+            setDraft((prev) => ({ ...prev, profile_image_url: null, profile_image_base64: null }));
             onNext();
           }}
           style={layoutStyles.secondaryLink}

@@ -44,6 +44,7 @@ export default function RegisterScreen() {
     nickname: '',
     gender: null,
     profile_image_url: null,
+    profile_image_base64: null,
     age: null,
   });
 
@@ -188,13 +189,7 @@ export default function RegisterScreen() {
         {step === 6 ? <NicknameStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
         {step === 7 ? <GenderStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
         {step === 8 ? (
-          <ProfileImageStep
-            draft={draft}
-            setDraft={setDraft}
-            supabase={supabase}
-            onNext={goNext}
-            onLoadingChange={setLoading}
-          />
+          <ProfileImageStep draft={draft} setDraft={setDraft} onNext={goNext} onLoadingChange={setLoading} />
         ) : null}
         {step === 9 ? (
           <AgeStep

@@ -8,6 +8,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
+import { decodeBase64ToBytes, PUBLIC_UPLOAD_BUCKET } from '@/app/utils/imageBytes';
 
 type PublicUser = {
   id: string;
@@ -20,25 +21,22 @@ type PublicUser = {
 
 async function uploadAvatarToSupabase({
   userId,
-  uri,
+  base64,
 }: {
   userId: string;
-  uri: string;
+  base64: string;
 }): Promise<string> {
-  // 버킷 `avatars` 안의 객체 키: `${userId}/${fileName}` (예: avatars 버킷 → "abc-uuid/1730000000.jpg")
-  const fileName = `${Date.now()}.jpg`;
-  const storagePath = `${userId}/${fileName}`;
+  // 게시물과 동일한 `posts` 버킷, 경로: `{userId}/profile_{ts}.jpg`
+  const storagePath = `${userId}/profile_${Date.now()}.jpg`;
+  const byteArray = decodeBase64ToBytes(base64);
 
-  const res = await fetch(uri);
-  const blob = await res.blob();
-
-  const { error: uploadError } = await supabase.storage.from('avatars').upload(storagePath, blob, {
-    contentType: blob.type || 'image/jpeg',
+  const { error: uploadError } = await supabase.storage.from(PUBLIC_UPLOAD_BUCKET).upload(storagePath, byteArray, {
+    contentType: 'image/jpeg',
     upsert: true,
   });
   if (uploadError) throw uploadError;
 
-  const { data } = supabase.storage.from('avatars').getPublicUrl(storagePath);
+  const { data } = supabase.storage.from(PUBLIC_UPLOAD_BUCKET).getPublicUrl(storagePath);
   if (!data?.publicUrl) throw new Error('프로필 이미지 URL 생성에 실패했습니다.');
   return data.publicUrl;
 }
@@ -138,10 +136,14 @@ export default function ProfileEditScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 0.9,
+        base64: true,
       });
       if (result.canceled) return;
-      const uri = result.assets?.[0]?.uri;
-      if (!uri) return;
+      const base64 = result.assets?.[0]?.base64;
+      if (!base64) {
+        Alert.alert('오류', '사진 데이터를 읽을 수 없습니다. 다시 선택해 주세요.');
+        return;
+      }
 
       setLoading(true);
       const {
@@ -149,7 +151,7 @@ export default function ProfileEditScreen() {
       } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('로그인이 필요합니다.');
 
-      const url = await uploadAvatarToSupabase({ userId: user.id, uri });
+      const url = await uploadAvatarToSupabase({ userId: user.id, base64 });
       console.log('[profile-edit] avatar upload public URL:', url);
 
       const { error } = await supabase.from('users').update({ profile_image_url: url }).eq('id', user.id);

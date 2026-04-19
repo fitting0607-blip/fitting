@@ -24,7 +24,10 @@ export type RegisterDraft = {
   workout_goals: string[];
   nickname: string;
   gender: Gender | null;
+  /** Set after Storage upload in age step (logged-in session). */
   profile_image_url: string | null;
+  /** Picked image (expo-image-picker base64) until 회원가입 완료 시 업로드 */
+  profile_image_base64: string | null;
   age: number | null;
 };
 

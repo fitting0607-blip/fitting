@@ -23,6 +23,7 @@ export default function WorkoutGoalsSelectScreen() {
     nickname: '',
     gender: null,
     profile_image_url: null,
+    profile_image_base64: null,
     age: null,
   });
 

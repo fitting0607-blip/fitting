@@ -17,41 +17,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '../supabase';
+import { decodeBase64ToBytes, PUBLIC_UPLOAD_BUCKET } from './utils/imageBytes';
 
 type FeedType = '일반' | '바디';
 
 const MAIN = '#3B3BF9';
-
-function decodeBase64ToBytes(base64: string) {
-  const atobImpl: ((data: string) => string) | undefined = (globalThis as any)?.atob;
-  if (atobImpl) {
-    const byteCharacters = atobImpl(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    return new Uint8Array(byteNumbers);
-  }
-
-  // Fallback base64 decoder for environments without atob (e.g. some RN runtimes).
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-  let str = base64.replace(/[^A-Za-z0-9+/=]/g, '');
-  let output: number[] = [];
-  let i = 0;
-  while (i < str.length) {
-    const enc1 = chars.indexOf(str.charAt(i++));
-    const enc2 = chars.indexOf(str.charAt(i++));
-    const enc3 = chars.indexOf(str.charAt(i++));
-    const enc4 = chars.indexOf(str.charAt(i++));
-    const chr1 = (enc1 << 2) | (enc2 >> 4);
-    const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-    const chr3 = ((enc3 & 3) << 6) | enc4;
-    output.push(chr1);
-    if (enc3 !== 64) output.push(chr2);
-    if (enc4 !== 64) output.push(chr3);
-  }
-  return new Uint8Array(output);
-}
 
 export default function PostCreateScreen() {
   const router = useRouter();
@@ -110,13 +80,13 @@ export default function PostCreateScreen() {
 
       const byteArray = decodeBase64ToBytes(base64);
 
-      const { error: uploadError } = await supabase.storage.from('posts').upload(storagePath, byteArray, {
+      const { error: uploadError } = await supabase.storage.from(PUBLIC_UPLOAD_BUCKET).upload(storagePath, byteArray, {
         contentType: 'image/jpeg',
         upsert: true,
       });
       if (uploadError) throw uploadError;
 
-      const { data } = supabase.storage.from('posts').getPublicUrl(storagePath);
+      const { data } = supabase.storage.from(PUBLIC_UPLOAD_BUCKET).getPublicUrl(storagePath);
       const imageUrls = [data.publicUrl];
 
       const { error: insertError } = await supabase.from('posts').insert({
