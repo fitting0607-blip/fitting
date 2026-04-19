@@ -18,6 +18,9 @@
 - 좋아요 기능 (일일 5회 무료, 초과 시 -3p, point_logs 기록, 취소 후 재전송 가능)
 - 프로필 열람 point_logs 기록 (-10p)
 - 매칭 시 point_logs 기록 (+5p)
+- 리워드 탭 (보유 매칭권/포인트 카드, 상점, 포인트→매칭권 교환, 출석체크/광고시청/친구초대 미션)
+- 상점 화면 (홈 상단 버튼, 리워드 탭 매칭권 구매 버튼으로 진입)
+- 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
@@ -59,6 +62,7 @@
 - app/(tabs)/map.tsx
 - app/(tabs)/chat.tsx
 - app/(tabs)/reward.tsx
+- app/store.tsx (상점)
 - app/(tabs)/my.tsx
 - app/settings.tsx
 - app/profile-edit.tsx

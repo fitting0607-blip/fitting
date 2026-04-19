@@ -1,3 +1,5 @@
+import { grantAttendanceIfNeededOnLogin } from '@/attendance-helpers';
+import { enqueueLoginAttendanceModal } from '@/login-attendance-pending';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -18,7 +20,7 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -26,6 +28,13 @@ export default function LoginScreen() {
       if (error) {
         Alert.alert('로그인 실패', error.message);
         return;
+      }
+
+      if (data.user?.id) {
+        const attendance = await grantAttendanceIfNeededOnLogin(data.user.id);
+        if (attendance.granted) {
+          enqueueLoginAttendanceModal(attendance.pointsAwarded);
+        }
       }
 
       router.replace('/(tabs)');

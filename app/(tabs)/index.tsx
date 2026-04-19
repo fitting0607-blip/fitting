@@ -14,9 +14,14 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
+import {
+  clearLoginAttendanceModalPoints,
+  peekLoginAttendanceModalPoints,
+} from '@/login-attendance-pending';
 import { supabase } from '../../supabase';
 import { useMatchModal } from '../hooks/useMatchModal';
 import { usePostLike } from '../hooks/usePostLike';
@@ -54,6 +59,7 @@ type TagKind = 'sport' | 'frequency' | 'goal';
 type TagItem = { kind: TagKind; label: string };
 
 const MAIN = '#3B3BF9';
+const ATTENDANCE_MODAL_MAIN = '#6C47FF';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_RATIO = 240 / 670;
 const MAX_FEED_WIDTH_WEB = 430;
@@ -87,6 +93,26 @@ export default function HomeScreen() {
   const [composeModalTitle, setComposeModalTitle] = useState('게시물을 작성하시겠어요?');
   const [openingProfile, setOpeningProfile] = useState(false);
   const { MatchModal, openMatchModal } = useMatchModal();
+
+  const [loginAttendanceModalVisible, setLoginAttendanceModalVisible] = useState(false);
+  const [loginAttendanceMessage, setLoginAttendanceMessage] = useState('');
+
+  useFocusEffect(
+    useCallback(() => {
+      const p = peekLoginAttendanceModalPoints();
+      if (p == null) return;
+      const id = setTimeout(() => {
+        clearLoginAttendanceModalPoints();
+        setLoginAttendanceMessage(
+          p === 25
+            ? '7일 연속 출석! +25p 적립됐어요 🎉'
+            : '출석 체크 완료! +5p 적립됐어요 🎉'
+        );
+        setLoginAttendanceModalVisible(true);
+      }, 350);
+      return () => clearTimeout(id);
+    }, [])
+  );
 
   const openComposeModalWithRemaining = useCallback(() => {
     void (async () => {
@@ -556,13 +582,14 @@ export default function HomeScreen() {
           onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
         >
           <Pressable
-            onPress={() => {}}
+            onPress={() => router.push('/store')}
             hitSlop={10}
-            style={styles.headerIconBtn}
+            style={styles.headerStoreBtn}
             accessibilityRole="button"
             accessibilityLabel="상점"
           >
-            <Feather name="award" size={22} color="#111111" />
+            <Feather name="shopping-bag" size={20} color="#111111" />
+            <Text style={styles.headerStoreLabel}>상점</Text>
           </Pressable>
 
           <Text style={styles.headerTitle}>fitting</Text>
@@ -648,6 +675,31 @@ export default function HomeScreen() {
               accessibilityLabel="안할래요"
             >
               <Text style={styles.modalTextBtnText}>안할래요</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={loginAttendanceModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLoginAttendanceModalVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setLoginAttendanceModalVisible(false)}
+        >
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>출석</Text>
+            <Text style={styles.modalDesc}>{loginAttendanceMessage}</Text>
+            <Pressable
+              style={[styles.modalPrimaryBtn, styles.loginAttendanceModalPrimaryBtn]}
+              onPress={() => setLoginAttendanceModalVisible(false)}
+              accessibilityRole="button"
+              accessibilityLabel="확인"
+            >
+              <Text style={styles.modalPrimaryBtnText}>확인</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -752,6 +804,19 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerStoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingRight: 4,
+    minHeight: 40,
+  },
+  headerStoreLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111111',
   },
   headerTitle: {
     fontSize: 18,
@@ -1099,5 +1164,8 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 14,
     fontWeight: '700',
+  },
+  loginAttendanceModalPrimaryBtn: {
+    backgroundColor: ATTENDANCE_MODAL_MAIN,
   },
 });
