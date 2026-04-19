@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -209,7 +209,7 @@ export default function ChatScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>채팅</Text>
         <Pressable
-          onPress={() => Alert.alert('알림', '준비 중입니다.')}
+          onPress={() => router.push('/notifications')}
           hitSlop={10}
           style={styles.headerIconBtn}
           accessibilityRole="button"

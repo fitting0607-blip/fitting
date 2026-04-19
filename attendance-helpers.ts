@@ -1,3 +1,4 @@
+import { insertMyNotification } from '@/notification-insert';
 import { supabase } from '@/supabase';
 
 export function getLocalDateString(d: Date): string {
@@ -90,6 +91,13 @@ export async function grantAttendanceIfNeededOnLogin(userId: string): Promise<Lo
     if (logErr) return { granted: false, reason: 'error' };
 
     const pointsAwarded: 5 | 25 = streakBefore === 6 ? 25 : 5;
+    await insertMyNotification({
+      userId,
+      type: 'point',
+      content:
+        pointsAwarded === 25 ? '출석 체크 +25p 적립됐어요' : '출석 체크 +5p 적립됐어요',
+    });
+
     return { granted: true, pointsAwarded };
   } catch {
     return { granted: false, reason: 'error' };

@@ -22,6 +22,7 @@ import {
   getLocalDateString,
   getTodayRangeISO,
 } from '@/attendance-helpers';
+import { insertMyNotification } from '@/notification-insert';
 import { supabase } from '@/supabase';
 
 const MAIN = '#6C47FF';
@@ -156,6 +157,12 @@ export default function RewardScreen() {
       });
       if (logErr) throw logErr;
 
+      await insertMyNotification({
+        userId,
+        type: 'point',
+        content: '포인트 50p로 매칭권 1개 교환됐어요',
+      });
+
       setPoints(curPoints - 50);
       setMatchingTickets(curTickets + 1);
       Alert.alert('교환 완료', '매칭권 1개를 받았어요.');
@@ -214,6 +221,13 @@ export default function RewardScreen() {
         reason: 'attendance',
       });
       if (logErr) throw logErr;
+
+      await insertMyNotification({
+        userId,
+        type: 'point',
+        content:
+          amount === 25 ? '출석 체크 +25p 적립됐어요' : '출석 체크 +5p 적립됐어요',
+      });
 
       setPoints(cur + amount);
       setAttendanceDone(true);

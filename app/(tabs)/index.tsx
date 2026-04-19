@@ -22,6 +22,7 @@ import {
   clearLoginAttendanceModalPoints,
   peekLoginAttendanceModalPoints,
 } from '@/login-attendance-pending';
+import { insertMyNotification } from '@/notification-insert';
 import { supabase } from '../../supabase';
 import { useMatchModal } from '../hooks/useMatchModal';
 import { usePostLike } from '../hooks/usePostLike';
@@ -209,6 +210,13 @@ export default function HomeScreen() {
                   reason: 'profile_view',
                 });
                 if (logError) throw logError;
+
+                await insertMyNotification({
+                  userId: user.id,
+                  type: 'point',
+                  content: '프로필 열람 -10p 차감됐어요',
+                  related_id: targetUserId,
+                });
 
                 router.push({ pathname: '/user-profile', params: { userId: targetUserId } });
               } catch (e: any) {
@@ -595,7 +603,7 @@ export default function HomeScreen() {
           <Text style={styles.headerTitle}>fitting</Text>
 
           <Pressable
-            onPress={() => {}}
+            onPress={() => router.push('/notifications')}
             hitSlop={10}
             style={styles.headerIconBtn}
             accessibilityRole="button"

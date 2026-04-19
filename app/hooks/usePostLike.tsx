@@ -8,6 +8,7 @@ import {
   Text,
 } from 'react-native';
 
+import { insertMyNotification } from '@/notification-insert';
 import { supabase } from '../../supabase';
 
 const MAIN = '#3B3BF9';
@@ -117,6 +118,13 @@ export function usePostLike() {
         reason: 'like_sent',
       });
       if (sentLogErr) throw sentLogErr;
+
+      await insertMyNotification({
+        userId: myId,
+        type: 'point',
+        content: '좋아요 -3p 차감됐어요',
+        related_id: postId,
+      });
     }
 
     const { error: dailyUpErr } = await supabase

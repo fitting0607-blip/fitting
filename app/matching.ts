@@ -1,6 +1,7 @@
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 
+import { insertMyNotification } from '@/notification-insert';
 import { supabase } from '../supabase';
 
 let matchRequestInFlight = false;
@@ -162,7 +163,7 @@ export async function runMatchRequest(
 
     await consumeTicketIfNeeded(myId, todaySentCountBeforeThis);
 
-    const { roomId } = await createMatchRequest(myId, targetUserId);
+    const { matchId, roomId } = await createMatchRequest(myId, targetUserId);
 
     const { data: meAfterMatch, error: mePointsError } = await supabase
       .from('users')
@@ -182,6 +183,13 @@ export async function runMatchRequest(
       reason: 'match_request',
     });
     if (matchLogError) throw matchLogError;
+
+    await insertMyNotification({
+      userId: myId,
+      type: 'point',
+      content: '매칭 요청 +5p 적립됐어요',
+      related_id: matchId,
+    });
 
     const nickname = await getUserNickname(targetUserId);
 
