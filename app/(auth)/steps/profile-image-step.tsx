@@ -1,9 +1,12 @@
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { RegisterDraft } from './types';
 import { PrimaryButton } from './components';
 import { COLORS, layoutStyles } from './ui';
+
+const THUMB_SIZE = 52;
 
 export function ProfileImageStep({
   draft,
@@ -57,22 +60,26 @@ export function ProfileImageStep({
 
         <Pressable
           onPress={pick}
-          style={{
-            borderWidth: 1,
-            borderColor: '#E5E7EB',
-            borderRadius: 16,
-            padding: 16,
-            backgroundColor: '#FFFFFF',
-          }}
+          style={styles.pickCard}
+          accessibilityRole="button"
+          accessibilityLabel={draft.profile_image_base64 ? '프로필 사진 변경' : '프로필 사진 선택'}
         >
-          <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.text }}>
-            {draft.profile_image_base64 ? '사진이 선택되었습니다 (다시 선택)' : '사진 선택하기'}
-          </Text>
           {draft.profile_image_base64 ? (
-            <Text style={{ marginTop: 6, fontSize: 12, color: COLORS.subtext }}>
-              가입 완료 시 프로필에 반영돼요
-            </Text>
-          ) : null}
+            <View style={styles.pickRow}>
+              <Image
+                source={{ uri: `data:image/jpeg;base64,${draft.profile_image_base64}` }}
+                style={styles.thumbnail}
+                contentFit="cover"
+                transition={120}
+              />
+              <View style={styles.pickTexts}>
+                <Text style={styles.pickTitle}>선택되었습니다</Text>
+                <Text style={styles.pickHint}>탭하여 다시 선택 · 가입 완료 시 프로필에 반영돼요</Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.pickPlaceholder}>사진 선택하기</Text>
+          )}
         </Pressable>
 
         <Pressable
@@ -92,4 +99,45 @@ export function ProfileImageStep({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  pickCard: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  pickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  thumbnail: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: THUMB_SIZE / 2,
+    backgroundColor: '#E5E7EB',
+  },
+  pickTexts: {
+    flex: 1,
+    minWidth: 0,
+  },
+  pickTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  pickHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: COLORS.subtext,
+    lineHeight: 16,
+  },
+  pickPlaceholder: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+});
 
