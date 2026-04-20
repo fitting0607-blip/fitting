@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, InteractionManager, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -54,7 +54,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<ChatListItem[]>([]);
 
-  const loadChatList = useCallback(async () => {
+  const fetchChatRooms = useCallback(async () => {
     setLoading(true);
     try {
       const {
@@ -140,18 +140,18 @@ export default function ChatScreen() {
         if (!lastMessageByRoomId.has(msg.room_id)) lastMessageByRoomId.set(msg.room_id, msg);
       }
 
-      // 5) unread counts (messages from other user and unread)
+      // 5) unread counts (상대 메시지 중 is_read가 true가 아닌 것 — null/false 모두 미읽음)
       const { data: unreadData, error: unreadError } = await supabase
         .from('messages')
         .select('id,room_id,sender_id,is_read')
         .in('room_id', roomIds)
-        .eq('is_read', false)
         .neq('sender_id', myId)
         .limit(1000);
       if (unreadError) throw unreadError;
 
       const unreadCountByRoomId = new Map<string, number>();
-      for (const row of (unreadData ?? []) as Array<Pick<MessageRow, 'room_id'>>) {
+      for (const row of (unreadData ?? []) as Array<Pick<MessageRow, 'room_id' | 'is_read'>>) {
+        if (row.is_read === true) continue;
         unreadCountByRoomId.set(row.room_id, (unreadCountByRoomId.get(row.room_id) ?? 0) + 1);
       }
 
@@ -195,8 +195,14 @@ export default function ChatScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void loadChatList();
-    }, [loadChatList])
+      // 네비게이션/제스처 완료 후 조회해 채팅방에서 읽음 처리 커밋 이후 데이터를 읽도록 함
+      const task = InteractionManager.runAfterInteractions(() => {
+        void fetchChatRooms();
+      });
+      return () => {
+        task.cancel();
+      };
+    }, [fetchChatRooms])
   );
 
   const emptyText = useMemo(() => {

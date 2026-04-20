@@ -1,4 +1,5 @@
 import Feather from '@expo/vector-icons/Feather';
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
@@ -48,17 +49,38 @@ export default function ChatRoomScreen() {
     setMyId(user?.id ? String(user.id) : '');
   }, []);
 
-  const markRoomAsRead = useCallback(
-    async (targetMyId: string) => {
-      if (!roomId || !targetMyId) return;
-      await supabase
-        .from('messages')
-        .update({ is_read: true })
-        .eq('room_id', roomId)
-        .neq('sender_id', targetMyId)
-        .eq('is_read', false);
-    },
-    [roomId]
+  /** 해당 방의 모든 메시지 읽음 (목록 뱃지용 DB와 일치) */
+  const markAllMessagesInRoomRead = useCallback(async () => {
+    if (!roomId) return;
+    const { error } = await supabase.from('messages').update({ is_read: true }).eq('room_id', roomId);
+    if (error) throw error;
+  }, [roomId]);
+
+  const roomIdRef = useRef(roomId);
+  roomIdRef.current = roomId;
+
+  const safeMarkAllReadFireAndForget = useCallback(() => {
+    const rid = roomIdRef.current;
+    if (!rid) return;
+    void supabase.from('messages').update({ is_read: true }).eq('room_id', rid);
+  }, []);
+
+  const handleBack = useCallback(async () => {
+    try {
+      await markAllMessagesInRoomRead();
+    } catch {
+      // ignore; navigation should still work
+    }
+    router.back();
+  }, [markAllMessagesInRoomRead, router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        // Run when leaving this screen (back gesture, hardware back, tab change, etc.)
+        safeMarkAllReadFireAndForget();
+      };
+    }, [safeMarkAllReadFireAndForget])
   );
 
   const loadMessages = useCallback(async () => {
@@ -73,6 +95,9 @@ export default function ChatRoomScreen() {
       const uid = user?.id ? String(user.id) : '';
       setMyId(uid);
 
+      // 진입 직후 DB 읽음 처리 완료 → 목록으로 돌아올 때 재조회와 순서 맞춤
+      await markAllMessagesInRoomRead();
+
       const { data, error } = await supabase
         .from('messages')
         .select('id,room_id,sender_id,content,is_read,created_at')
@@ -82,7 +107,6 @@ export default function ChatRoomScreen() {
       if (error) throw error;
 
       setMessages((data ?? []) as MessageRow[]);
-      if (uid) void markRoomAsRead(uid);
 
       requestAnimationFrame(() => {
         listRef.current?.scrollToEnd({ animated: false });
@@ -92,7 +116,7 @@ export default function ChatRoomScreen() {
     } finally {
       setLoading(false);
     }
-  }, [markRoomAsRead, roomId]);
+  }, [markAllMessagesInRoomRead, roomId]);
 
   const sendMessage = useCallback(async () => {
     const content = input.trim();
@@ -138,6 +162,12 @@ export default function ChatRoomScreen() {
   }, [loadMessages]);
 
   useEffect(() => {
+    return () => {
+      safeMarkAllReadFireAndForget();
+    };
+  }, [safeMarkAllReadFireAndForget]);
+
+  useEffect(() => {
     if (!roomId) return;
 
     const channel = supabase
@@ -160,8 +190,7 @@ export default function ChatRoomScreen() {
             return next;
           });
 
-          // If it's from other user, mark read quickly.
-          if (myId && row.sender_id !== myId) void markRoomAsRead(myId);
+          if (myId && row.sender_id !== myId) void markAllMessagesInRoomRead();
 
           requestAnimationFrame(() => {
             listRef.current?.scrollToEnd({ animated: true });
@@ -173,7 +202,7 @@ export default function ChatRoomScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [markRoomAsRead, myId, roomId]);
+  }, [markAllMessagesInRoomRead, myId, roomId]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
@@ -184,7 +213,7 @@ export default function ChatRoomScreen() {
       >
         <View style={styles.topBar}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={handleBack}
             hitSlop={10}
             style={styles.topIconBtn}
             accessibilityRole="button"
