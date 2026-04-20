@@ -52,7 +52,10 @@
 
 ### RLS 보안
 - likes, chat_rooms, messages, point_logs, notifications → RLS 활성화 완료
-- matches, posts, users → RLS 미설정 (추후 배포 전 설정 필요)
+- matches, posts, users → RLS 활성화 및 정책 설정 완료
+  - matches: 본인 requester/target만 조회, requester만 INSERT/DELETE
+  - posts: is_deleted=false 전체 조회, 본인만 INSERT/UPDATE/DELETE
+  - users: 로그인 유저 전체 조회, 본인만 UPDATE
 
 ### Realtime 활성화
 - messages, notifications
