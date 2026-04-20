@@ -143,15 +143,15 @@ export default function ChatScreen() {
       // 5) unread counts (상대 메시지 중 is_read가 true가 아닌 것 — null/false 모두 미읽음)
       const { data: unreadData, error: unreadError } = await supabase
         .from('messages')
-        .select('id,room_id,sender_id,is_read')
+        .select('room_id')
         .in('room_id', roomIds)
         .neq('sender_id', myId)
+        .or('is_read.is.null,is_read.eq.false')
         .limit(1000);
       if (unreadError) throw unreadError;
 
       const unreadCountByRoomId = new Map<string, number>();
-      for (const row of (unreadData ?? []) as Array<Pick<MessageRow, 'room_id' | 'is_read'>>) {
-        if (row.is_read === true) continue;
+      for (const row of (unreadData ?? []) as Array<Pick<MessageRow, 'room_id'>>) {
         unreadCountByRoomId.set(row.room_id, (unreadCountByRoomId.get(row.room_id) ?? 0) + 1);
       }
 
@@ -263,20 +263,24 @@ export default function ChatScreen() {
                     <Text style={styles.nickname} numberOfLines={1}>
                       {item.nickname}
                     </Text>
-                    {item.unreadCount > 0 ? (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText} numberOfLines={1}>
-                          {item.unreadCount > 99 ? '99+' : String(item.unreadCount)}
-                        </Text>
-                      </View>
-                    ) : null}
                   </View>
                   <Text style={styles.preview} numberOfLines={1}>
                     {item.lastMessage}
                   </Text>
                 </View>
 
-                <Feather name="chevron-right" size={18} color="#9CA3AF" />
+                <View style={styles.right}>
+                  {item.unreadCount > 0 ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText} numberOfLines={1}>
+                        {item.unreadCount > 99 ? '99+' : String(item.unreadCount)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.badgeSpacer} />
+                  )}
+                  <Feather name="chevron-right" size={18} color="#9CA3AF" />
+                </View>
               </Pressable>
             );
           }}
@@ -377,14 +381,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6B7280',
   },
+  right: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 8,
+  },
   badge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
+    minWidth: 20,
+    minHeight: 20,
+    height: 20,
+    borderRadius: 10,
     paddingHorizontal: 6,
-    backgroundColor: MAIN,
+    backgroundColor: '#EF4444',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  badgeSpacer: {
+    minWidth: 20,
+    height: 20,
   },
   badgeText: {
     color: '#FFFFFF',

@@ -15,6 +15,8 @@
 - 상대방 프로필 보기 (10p 차감)
 - 매칭하기 기능 (일일 3회 무료, 매칭권 차감, 단방향 DM)
 - 채팅 탭 (채팅 목록, 실시간 채팅방, 매칭 후 자동 이동, 알림 벨 아이콘)
+  - 채팅 unread 뱃지 정상 표시 (읽음 처리 sender 필터 수정)
+  - 채팅방 레이아웃 수정 (상단 여백, 메시지 정렬)
 - 좋아요 기능 (일일 5회 무료, 초과 시 -3p, point_logs 기록, 취소 후 재전송 가능)
 - 프로필 열람 point_logs 기록 (-10p)
 - 매칭 시 point_logs 기록 (+5p)
@@ -52,6 +54,8 @@
 
 ### RLS 보안
 - likes, chat_rooms, messages, point_logs, notifications → RLS 활성화 완료
+  - chat_rooms SELECT 무한 재귀 수정 (match_id in 방식으로 변경)
+  - messages SELECT 정책 수정 (room_id in 방식으로 변경)
 - matches, posts, users → RLS 활성화 및 정책 설정 완료
   - matches: 본인 requester/target만 조회, requester만 INSERT/DELETE
   - posts: is_deleted=false 전체 조회, 본인만 INSERT/UPDATE/DELETE

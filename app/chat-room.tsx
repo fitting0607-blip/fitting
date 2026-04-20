@@ -49,20 +49,30 @@ export default function ChatRoomScreen() {
     setMyId(user?.id ? String(user.id) : '');
   }, []);
 
-  /** 해당 방의 모든 메시지 읽음 (목록 뱃지용 DB와 일치) */
-  const markAllMessagesInRoomRead = useCallback(async () => {
-    if (!roomId) return;
-    const { error } = await supabase.from('messages').update({ is_read: true }).eq('room_id', roomId);
+  /** 해당 방에서 '상대가 보낸' 메시지만 읽음 처리 (목록 뱃지용 DB와 일치) */
+  const markAllMessagesInRoomRead = useCallback(async (rid?: string, uid?: string) => {
+    const effectiveRoomId = rid ?? roomId;
+    const effectiveMyId = uid ?? myId;
+    if (!effectiveRoomId || !effectiveMyId) return;
+    const { error } = await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .eq('room_id', effectiveRoomId)
+      .neq('sender_id', effectiveMyId);
     if (error) throw error;
-  }, [roomId]);
+  }, [myId, roomId]);
 
   const roomIdRef = useRef(roomId);
   roomIdRef.current = roomId;
 
+  const myIdRef = useRef(myId);
+  myIdRef.current = myId;
+
   const safeMarkAllReadFireAndForget = useCallback(() => {
     const rid = roomIdRef.current;
-    if (!rid) return;
-    void supabase.from('messages').update({ is_read: true }).eq('room_id', rid);
+    const uid = myIdRef.current;
+    if (!rid || !uid) return;
+    void supabase.from('messages').update({ is_read: true }).eq('room_id', rid).neq('sender_id', uid);
   }, []);
 
   const handleBack = useCallback(async () => {
@@ -96,7 +106,7 @@ export default function ChatRoomScreen() {
       setMyId(uid);
 
       // 진입 직후 DB 읽음 처리 완료 → 목록으로 돌아올 때 재조회와 순서 맞춤
-      await markAllMessagesInRoomRead();
+      await markAllMessagesInRoomRead(roomId, uid);
 
       const { data, error } = await supabase
         .from('messages')
@@ -124,24 +134,27 @@ export default function ChatRoomScreen() {
     if (sending) return;
     setSending(true);
     try {
-      const optimistic: MessageRow = {
-        id: `optimistic_${Date.now()}`,
-        room_id: roomId,
-        sender_id: myId,
-        content,
-        is_read: true,
-        created_at: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, optimistic]);
       setInput('');
 
-      const { error } = await supabase.from('messages').insert({
-        room_id: roomId,
-        sender_id: myId,
-        content,
-        is_read: false,
-      });
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          room_id: roomId,
+          sender_id: myId,
+          content,
+          is_read: false,
+        })
+        .select('id,room_id,sender_id,content,is_read,created_at')
+        .single();
       if (error) throw error;
+
+      if (data?.id) {
+        const inserted = data as MessageRow;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === inserted.id)) return prev;
+          return [...prev, inserted].sort((a, b) => a.created_at.localeCompare(b.created_at));
+        });
+      }
 
       requestAnimationFrame(() => {
         listRef.current?.scrollToEnd({ animated: true });
@@ -209,7 +222,7 @@ export default function ChatRoomScreen() {
       <KeyboardAvoidingView
         style={styles.body}
         behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <View style={styles.topBar}>
           <Pressable
@@ -240,6 +253,7 @@ export default function ChatRoomScreen() {
             }}
             data={messages}
             keyExtractor={(m) => m.id}
+            style={styles.list}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => {
               const isMine = myId && item.sender_id === myId;
@@ -334,9 +348,13 @@ const styles = StyleSheet.create({
   },
 
   listContent: {
+    flexGrow: 1,
     paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 12,
+  },
+  list: {
+    flex: 1,
   },
   msgRow: {
     marginBottom: 10,
