@@ -28,7 +28,7 @@ import { supabase } from '@/supabase';
 const MAIN = '#3B3BF9';
 const BTN_SOFT_BG = '#E8EAFF';
 
-const GOOGLE_PLACES_API_KEY = 'AIzaSyBqxzxKz4mwHfLtMJkszpoNuJnrGne-OAo';
+const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 const SEOUL_REGION: Region = {
   latitude: 37.5665,
@@ -253,7 +253,7 @@ export default function MapScreen() {
         const url =
           `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
           `?input=${encodeURIComponent(q)}` +
-          `&key=${encodeURIComponent(GOOGLE_PLACES_API_KEY)}` +
+          `&key=${encodeURIComponent(GOOGLE_PLACES_API_KEY ?? '')}` +
           `&language=ko` +
           `&components=country:kr` +
           `&types=geocode`;
@@ -287,7 +287,7 @@ export default function MapScreen() {
           `https://maps.googleapis.com/maps/api/place/details/json` +
           `?place_id=${encodeURIComponent(p.place_id)}` +
           `&fields=geometry,name,formatted_address` +
-          `&key=${encodeURIComponent(GOOGLE_PLACES_API_KEY)}` +
+          `&key=${encodeURIComponent(GOOGLE_PLACES_API_KEY ?? '')}` +
           `&language=ko`;
         console.log('[places][details] url:', url);
         const res = await fetch(url);
