@@ -286,6 +286,21 @@ export default function HomeScreen() {
       if (authError) throw authError;
 
       const myId = user?.id ?? null;
+      let blockedIds: string[] = [];
+      if (myId) {
+        const { data: blocksData, error: blocksError } = await supabase
+          .from('blocks')
+          .select('blocked_id')
+          .eq('blocker_id', myId);
+        if (blocksError) throw blocksError;
+        blockedIds = Array.from(
+          new Set(
+            (blocksData ?? [])
+              .map((r: any) => String(r?.blocked_id ?? '').trim())
+              .filter((id) => id.length > 0)
+          )
+        );
+      }
 
       let query = supabase
         .from('posts')
@@ -314,10 +329,15 @@ export default function HomeScreen() {
         throw error;
       }
 
-      const list = (data ?? []) as Omit<PostFeedRow, 'display_image_urls'>[];
+      const rawList = (data ?? []) as Omit<PostFeedRow, 'display_image_urls'>[];
+      const list =
+        blockedIds.length === 0
+          ? rawList
+          : rawList.filter((p) => !blockedIds.includes(String(p.user_id ?? '').trim()));
       console.log('[HomeFeed] posts query ok', {
         selectedTab,
         myId,
+        blockedCount: blockedIds.length,
         count: list.length,
         sample: list[0] ? { id: list[0].id, user_id: list[0].user_id } : null,
       });

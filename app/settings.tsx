@@ -66,7 +66,7 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>내 계정</Text>
         <View style={styles.sectionBox}>
-          <Row label="차단목록" onPress={todo} />
+          <Row label="차단목록" onPress={() => router.push('/block-list')} />
           <View style={styles.divider} />
           <Row label="프로필 수정" onPress={() => router.push('/profile-edit')} />
         </View>

@@ -24,6 +24,8 @@
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
 - 알림에서 프로필 보기 기능
+- 신고 기능 (신고 사유 6가지, reports 테이블)
+- 차단 기능 (차단/해제, 차단목록, 홈 피드 필터링)
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
@@ -40,6 +42,8 @@
 - public.messages (id, room_id, sender_id, content, is_read, created_at)
 - public.point_logs (id, user_id, amount, reason, created_at)
 - public.notifications (id, user_id, type, content, is_read, related_id, created_at)
+- public.reports (id, reporter_id, target_id, post_id, reason, detail, created_at)
+- public.blocks (id, blocker_id, blocked_id, created_at)
 
 ### RLS 보안
 - likes, chat_rooms, messages, point_logs, notifications → RLS 활성화 완료

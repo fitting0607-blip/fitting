@@ -52,6 +52,8 @@ export default function UserProfileScreen() {
   const [countNormal, setCountNormal] = useState(0);
   const [countBody, setCountBody] = useState(0);
   const [feedTab, setFeedTab] = useState<FeedTab>('일반');
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockingBusy, setBlockingBusy] = useState(false);
 
   const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
     const list = (urls ?? []).filter(Boolean);
@@ -93,6 +95,19 @@ export default function UserProfileScreen() {
           .maybeSingle();
         if (uError) throw uError;
 
+        if (myId && userId && myId !== userId) {
+          const { data: b, error: bError } = await supabase
+            .from('blocks')
+            .select('id')
+            .eq('blocker_id', myId)
+            .eq('blocked_id', userId)
+            .maybeSingle();
+          if (bError && (bError as any)?.code !== 'PGRST116') throw bError;
+          setIsBlocked(Boolean(b?.id));
+        } else {
+          setIsBlocked(false);
+        }
+
         const { data: p, error: pError } = await supabase
           .from('posts')
           .select('id,user_id,post_type,image_urls,created_at')
@@ -132,6 +147,7 @@ export default function UserProfileScreen() {
         setCountNormal(0);
         setCountBody(0);
         setViewerId(null);
+        setIsBlocked(false);
         void loadMyLikesForPostIds([], null);
         Alert.alert('불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       } finally {
@@ -163,6 +179,54 @@ export default function UserProfileScreen() {
   }, [feedTab, posts]);
 
   const showLikeOnPosts = Boolean(viewerId && userId && viewerId !== userId);
+  const showBlockBtn = Boolean(viewerId && userId && viewerId !== userId);
+
+  const toggleBlock = useCallback(() => {
+    if (!viewerId || !userId || viewerId === userId) return;
+    if (blockingBusy) return;
+
+    const nextIsBlocked = !isBlocked;
+    Alert.alert(
+      nextIsBlocked ? '차단할까요?' : '차단 해제할까요?',
+      nextIsBlocked ? '차단하면 상대방의 게시물이 홈 피드에서 숨겨져요.' : '차단을 해제합니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: nextIsBlocked ? '차단' : '해제',
+          style: nextIsBlocked ? 'destructive' : 'default',
+          onPress: () => {
+            void (async () => {
+              setBlockingBusy(true);
+              try {
+                if (nextIsBlocked) {
+                  const { error } = await supabase.from('blocks').insert({
+                    blocker_id: viewerId,
+                    blocked_id: userId,
+                  });
+                  if (error) throw error;
+                  setIsBlocked(true);
+                  Alert.alert('차단 완료', '차단했어요.');
+                } else {
+                  const { error } = await supabase
+                    .from('blocks')
+                    .delete()
+                    .eq('blocker_id', viewerId)
+                    .eq('blocked_id', userId);
+                  if (error) throw error;
+                  setIsBlocked(false);
+                  Alert.alert('차단 해제', '차단을 해제했어요.');
+                }
+              } catch (e: any) {
+                Alert.alert('처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+              } finally {
+                setBlockingBusy(false);
+              }
+            })();
+          },
+        },
+      ]
+    );
+  }, [blockingBusy, isBlocked, userId, viewerId]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -179,7 +243,7 @@ export default function UserProfileScreen() {
 
         <View style={styles.topRight}>
           <Pressable
-            onPress={() => Alert.alert('신고', '준비 중입니다.')}
+            onPress={() => router.push({ pathname: '/report', params: { targetId: userId } })}
             hitSlop={10}
             style={styles.topIconBtn}
             accessibilityRole="button"
@@ -314,14 +378,29 @@ export default function UserProfileScreen() {
       </View>
 
       <View style={styles.bottomBar}>
-        <Pressable
-          onPress={() => openMatchModal(userId)}
-          style={styles.matchBtn}
-          accessibilityRole="button"
-          accessibilityLabel="매칭하기"
-        >
-          <Text style={styles.matchBtnText}>매칭하기</Text>
-        </Pressable>
+        <View style={styles.bottomRow}>
+          <Pressable
+            onPress={() => openMatchModal(userId)}
+            style={styles.matchBtn}
+            accessibilityRole="button"
+            accessibilityLabel="매칭하기"
+          >
+            <Text style={styles.matchBtnText}>매칭하기</Text>
+          </Pressable>
+
+          {showBlockBtn ? (
+            <Pressable
+              onPress={toggleBlock}
+              style={[styles.blockBtn, isBlocked ? styles.blockBtnOn : null]}
+              accessibilityRole="button"
+              accessibilityLabel="차단"
+            >
+              <Text style={[styles.blockBtnText, isBlocked ? styles.blockBtnTextOn : null]}>
+                {blockingBusy ? '처리 중…' : isBlocked ? '차단 해제' : '차단'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <LikeModal />
@@ -532,7 +611,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
   },
+  bottomRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
   matchBtn: {
+    flex: 1,
     height: 54,
     borderRadius: 14,
     backgroundColor: MAIN,
@@ -542,6 +627,25 @@ const styles = StyleSheet.create({
   matchBtnText: {
     fontSize: 16,
     fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  blockBtn: {
+    width: 96,
+    height: 54,
+    borderRadius: 14,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  blockBtnOn: {
+    backgroundColor: '#111111',
+  },
+  blockBtnText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#111111',
+  },
+  blockBtnTextOn: {
     color: '#FFFFFF',
   },
 });
