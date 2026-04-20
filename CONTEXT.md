@@ -27,6 +27,9 @@
 - 신고 기능 (신고 사유 6가지, reports 테이블)
 - 차단 기능 (차단/해제, 차단목록, 홈 피드 필터링)
 - 채팅 읽음 처리 (채팅방 진입 시 읽음, 목록 뱃지 사라짐)
+- 지도 탭 (구글맵, 내 위치, 지역 검색, 트레이너 목록 바텀시트)
+- 피티 등록 신청 화면 (3단계 플로우, 자격증 선택사항, 승인 대기/취소/결제 대기 상태)
+- 트레이너 상세 화면
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
@@ -45,6 +48,7 @@
 - public.notifications (id, user_id, type, content, is_read, related_id, created_at)
 - public.reports (id, reporter_id, target_id, post_id, reason, detail, created_at)
 - public.blocks (id, blocker_id, blocked_id, created_at)
+- public.trainer_profiles (id, user_id, facility_name, facility_addr, facility_addr_detail, intro, latitude, longitude, status, is_approved, facility_images, cert_images, profile_images, created_at, updated_at)
 
 ### RLS 보안
 - likes, chat_rooms, messages, point_logs, notifications → RLS 활성화 완료
@@ -67,7 +71,9 @@
 - app/(auth)/register.tsx
 - app/(auth)/steps/ (멀티스텝 컴포넌트)
 - app/(tabs)/index.tsx (홈 피드)
-- app/(tabs)/map.tsx
+- app/(tabs)/map.tsx (구글맵, 승인된 트레이너 마커·목록)
+- app/trainer-detail.tsx
+- app/trainer-apply.tsx
 - app/(tabs)/chat.tsx
 - app/(tabs)/reward.tsx
 - app/store.tsx (상점)

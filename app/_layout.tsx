@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Redirect, Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -51,6 +52,7 @@ export default function RootLayout() {
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -63,9 +65,12 @@ export default function RootLayout() {
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="report" options={{ headerShown: false }} />
         <Stack.Screen name="block-list" options={{ headerShown: false }} />
+        <Stack.Screen name="trainer-detail" options={{ headerShown: false }} />
+        <Stack.Screen name="trainer-apply" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

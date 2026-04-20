@@ -9,9 +9,13 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "googleMapsApiKey": "AIzaSyBqxzxKz4mwHfLtMJkszpoNuJnrGne-OAo"
     },
     "android": {
+      "googleMaps": {
+        "apiKey": "AIzaSyBqxzxKz4mwHfLtMJkszpoNuJnrGne-OAo"
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,6 +41,12 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "지도에서 내 위치와 주변 트레이너를 보기 위해 위치 접근이 필요해요."
         }
       ]
     ],
