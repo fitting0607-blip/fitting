@@ -12,6 +12,12 @@
 - 닉네임 중복 체크 (500ms debounce 실시간 검증, 사용가능/중복 표시)
 - users 테이블 nickname unique constraint 추가
 - 로그인/로그아웃
+- 관리자 웹 (admin/ 폴더):
+  - React + Vite + TypeScript + Tailwind CSS + React Router v6
+  - Supabase 연동
+  - 관리자 로그인 (is_admin 권한 체크)
+  - 유저목록 페이지 (조회/검색/상세보기/삭제)
+  - 사이드바 레이아웃 (유저목록, 피티유저, 신고목록, 상품관리, 배너관리, 약관관리)
 - 홈 피드 (게시물 카드, 배너, 좋아요, 매칭하기, 덤벨 버튼)
 - 홈 피드 필터 및 정렬:
   - 성별 필터 (남성=여성 게시물만, 여성=남성 게시물만)
@@ -60,6 +66,12 @@
 - public.reports (id, reporter_id, target_id, post_id, reason, detail, created_at)
 - public.blocks (id, blocker_id, blocked_id, created_at)
 - public.trainer_profiles (id, user_id, facility_name, facility_addr, facility_addr_detail, intro, latitude, longitude, status, is_approved, facility_images, cert_images, profile_images, created_at, updated_at)
+- public.products (상품 관리용)
+
+### DB 변경
+- users 테이블 is_admin 컬럼 추가 (boolean, default false)
+- users 테이블 phone 컬럼 추가 (text)
+- products 테이블 생성 (상품 관리용)
 
 ### RLS 보안
 - likes, chat_rooms, messages, point_logs, notifications → RLS 활성화 완료
@@ -69,6 +81,7 @@
   - matches: 본인 requester/target만 조회, requester만 INSERT/DELETE
   - posts: is_deleted=false 전체 조회, 본인만 INSERT/UPDATE/DELETE
   - users: 로그인 유저 전체 조회, 본인만 UPDATE
+- admin_delete_users, admin_delete_posts RLS 정책 추가
 
 ### Realtime 활성화
 - messages, notifications
