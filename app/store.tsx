@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,20 +20,19 @@ const MAIN = '#6C47FF';
 type StoreItem = {
   id: string;
   title: string;
-  subtitle: string;
+  ticket_count: number;
+  price: number;
+  discount_rate: number;
+  bonus_points: number;
 };
-
-const STORE_ITEMS: StoreItem[] = [
-  { id: '1', title: '매칭권 1개', subtitle: '₩1,000' },
-  { id: '5', title: '매칭권 5개', subtitle: '₩4,500' },
-  { id: '10', title: '매칭권 10개', subtitle: '₩8,000' },
-];
 
 export default function StoreScreen() {
   const router = useRouter();
   const [points, setPoints] = useState<number | null>(null);
   const [matchingTickets, setMatchingTickets] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<StoreItem[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,10 +66,51 @@ export default function StoreScreen() {
     }
   }, []);
 
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id,title,ticket_count,price,discount_rate,bonus_points')
+        .eq('category', 'matching_ticket')
+        .eq('is_active', true)
+        .order('price', { ascending: true });
+      if (error) throw error;
+
+      const rows = (data ?? []) as Array<{
+        id: string;
+        title: string | null;
+        ticket_count: number | null;
+        price: number | null;
+        discount_rate: number | null;
+        bonus_points: number | null;
+      }>;
+
+      setProducts(
+        rows
+          .filter((r) => !!r?.id)
+          .map((r) => ({
+            id: r.id,
+            title: r.title ?? '매칭권',
+            ticket_count: typeof r.ticket_count === 'number' ? r.ticket_count : 0,
+            price: typeof r.price === 'number' ? r.price : 0,
+            discount_rate: typeof r.discount_rate === 'number' ? r.discount_rate : 0,
+            bonus_points: typeof r.bonus_points === 'number' ? r.bonus_points : 0,
+          }))
+      );
+    } catch (e: any) {
+      Alert.alert('상품 불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+      setProducts([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+      void loadProducts();
+    }, [load, loadProducts])
   );
 
   const goBack = useCallback(() => router.back(), [router]);
@@ -78,6 +118,18 @@ export default function StoreScreen() {
   const onItemPress = useCallback(() => {
     Alert.alert('준비 중입니다');
   }, []);
+
+  const formatKRW = useCallback((value: number) => {
+    const safe = Number.isFinite(value) ? value : 0;
+    try {
+      return new Intl.NumberFormat('ko-KR').format(Math.round(safe));
+    } catch {
+      return String(Math.round(safe));
+    }
+  }, []);
+
+  const hasAnyProducts = products.length > 0;
+  const productsEmpty = useMemo(() => !productsLoading && !hasAnyProducts, [productsLoading, hasAnyProducts]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -120,26 +172,51 @@ export default function StoreScreen() {
 
         <Text style={styles.sectionLabel}>매칭권 구매</Text>
 
-        {STORE_ITEMS.map((item) => (
-          <Pressable
-            key={item.id}
-            onPress={onItemPress}
-            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-            accessibilityRole="button"
-            accessibilityLabel={item.title}
-          >
-            <View style={styles.rowLeft}>
-              <View style={styles.iconWrap}>
-                <Feather name="package" size={22} color={MAIN} />
+        {productsLoading ? (
+          <View style={styles.productsLoading}>
+            <ActivityIndicator size="small" color={MAIN} />
+            <Text style={styles.productsLoadingText}>상품 불러오는 중…</Text>
+          </View>
+        ) : productsEmpty ? (
+          <View style={styles.productsEmpty}>
+            <Text style={styles.productsEmptyText}>현재 구매 가능한 상품이 없습니다.</Text>
+          </View>
+        ) : (
+          products.map((item) => (
+            <Pressable
+              key={item.id}
+              onPress={onItemPress}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={item.title}
+            >
+              <View style={styles.rowLeft}>
+                <View style={styles.iconWrap}>
+                  <Text style={styles.dumbbellIcon} accessibilityLabel="매칭권">
+                    🏋️
+                  </Text>
+                </View>
+                <View style={styles.rowBody}>
+                  <View style={styles.rowTitleLine}>
+                    <Text style={styles.rowTitle}>{item.title}</Text>
+                    {item.discount_rate > 0 ? (
+                      <View style={styles.badge}>
+                        <Text style={styles.badgeText}>{item.discount_rate}%</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.metaLine}>
+                    <Text style={styles.priceText}>₩{formatKRW(item.price)}</Text>
+                    {item.bonus_points > 0 ? (
+                      <Text style={styles.bonusText}>+{formatKRW(item.bonus_points)}포인트 적립</Text>
+                    ) : null}
+                  </View>
+                </View>
               </View>
-              <View>
-                <Text style={styles.rowTitle}>{item.title}</Text>
-                <Text style={styles.rowSubtitle}>{item.subtitle}</Text>
-              </View>
-            </View>
-            <Feather name="chevron-right" size={20} color="#9CA3AF" />
-          </Pressable>
-        ))}
+              <Feather name="chevron-right" size={20} color="#9CA3AF" />
+            </Pressable>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -240,6 +317,17 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
   },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rowTitleLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 6,
+  },
   iconWrap: {
     width: 44,
     height: 44,
@@ -248,13 +336,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  dumbbellIcon: {
+    fontSize: 20,
+    lineHeight: 22,
+  },
   rowTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#111111',
-    marginBottom: 4,
   },
-  rowSubtitle: {
+  priceText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  metaLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  bonusText: {
+    fontSize: 13,
+    color: MAIN,
+    fontWeight: '700',
+  },
+  badge: {
+    backgroundColor: MAIN,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  productsLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+  },
+  productsLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  productsEmpty: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productsEmptyText: {
     fontSize: 14,
     color: '#6B7280',
   },
