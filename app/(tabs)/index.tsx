@@ -32,6 +32,7 @@ type FeedTab = '일반' | '바디';
 type PostUser = {
   id: string;
   nickname: string | null;
+  gender?: string | null;
   mbti: string | null;
   sports: string[] | null;
   workout_frequency: string | null;
@@ -286,8 +287,33 @@ export default function HomeScreen() {
       if (authError) throw authError;
 
       const myId = user?.id ?? null;
+      let myGender: string | null = null;
+      let matchedUserIds: string[] = [];
       let blockedIds: string[] = [];
       if (myId) {
+        const [{ data: meRow, error: meError }, { data: matchesData, error: matchesError }] =
+          await Promise.all([
+            supabase.from('users').select('gender').eq('id', myId).maybeSingle(),
+            supabase
+              .from('matches')
+              .select('requester_id,target_id')
+              .or(`requester_id.eq.${myId},target_id.eq.${myId}`),
+          ]);
+
+        if (meError) throw meError;
+        myGender = (meRow as any)?.gender ?? null;
+
+        if (matchesError) throw matchesError;
+        const mlist = (matchesData ?? []) as any[];
+        matchedUserIds = Array.from(
+          new Set(
+            mlist
+              .flatMap((m) => [m?.requester_id, m?.target_id])
+              .map((v) => String(v ?? '').trim())
+              .filter((id) => id.length > 0 && id !== myId)
+          )
+        );
+
         const { data: blocksData, error: blocksError } = await supabase
           .from('blocks')
           .select('blocked_id')
@@ -313,10 +339,7 @@ export default function HomeScreen() {
           created_at
         `)
         .eq('post_type', selectedTab)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (myId) query = query.neq('user_id', myId);
+        .limit(200);
 
       const { data, error } = await query;
       if (error) {
@@ -330,27 +353,36 @@ export default function HomeScreen() {
       }
 
       const rawList = (data ?? []) as Omit<PostFeedRow, 'display_image_urls'>[];
-      const list =
-        blockedIds.length === 0
-          ? rawList
-          : rawList.filter((p) => !blockedIds.includes(String(p.user_id ?? '').trim()));
+      const baseFiltered = rawList.filter((p) => {
+        const uid = String((p as any)?.user_id ?? '').trim();
+        if (!uid) return false;
+        if (myId && uid === myId) return false; // 본인 게시물 제외
+        if (matchedUserIds.length > 0 && matchedUserIds.includes(uid)) return false; // 매칭 유저 제외
+        if (blockedIds.length > 0 && blockedIds.includes(uid)) return false; // 차단 유저 제외(기존 유지)
+        return true;
+      });
       console.log('[HomeFeed] posts query ok', {
         selectedTab,
         myId,
         blockedCount: blockedIds.length,
-        count: list.length,
-        sample: list[0] ? { id: list[0].id, user_id: list[0].user_id } : null,
+        matchedCount: matchedUserIds.length,
+        count: baseFiltered.length,
+        sample: baseFiltered[0] ? { id: baseFiltered[0].id, user_id: baseFiltered[0].user_id } : null,
       });
 
       const userIds = Array.from(
-        new Set(list.map((p) => p.user_id).filter((id): id is string => typeof id === 'string' && id.length > 0))
+        new Set(
+          baseFiltered
+            .map((p) => p.user_id)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        )
       );
 
       let usersById = new Map<string, PostUser>();
       if (userIds.length > 0) {
         const { data: usersData, error: usersError } = await supabase
           .from('users')
-          .select('id,nickname,mbti,sports,workout_goals,workout_frequency,profile_image_url')
+          .select('id,gender,nickname,mbti,sports,workout_goals,workout_frequency,profile_image_url')
           .in('id', userIds);
         if (usersError) throw usersError;
 
@@ -358,8 +390,32 @@ export default function HomeScreen() {
         usersById = new Map(usersList.map((u) => [u.id, u]));
       }
 
+      const oppositeGender =
+        myGender === 'male' ? 'female' : myGender === 'female' ? 'male' : null;
+
+      const list =
+        oppositeGender == null
+          ? baseFiltered
+          : baseFiltered.filter((p) => {
+              const author = usersById.get(p.user_id);
+              const authorGender = (author as any)?.gender ?? null;
+              return authorGender === oppositeGender;
+            });
+
+      const todayStartMs = (() => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d.getTime();
+      })();
+
+      const shuffle = <T,>(arr: T[]) => arr.slice().sort(() => Math.random() - 0.5);
+
+      const todayPosts = list.filter((p) => new Date(p.created_at).getTime() >= todayStartMs);
+      const otherPosts = list.filter((p) => new Date(p.created_at).getTime() < todayStartMs);
+      const sortedList = shuffle(todayPosts).concat(shuffle(otherPosts));
+
       const resolved = await Promise.all(
-        list.map(async (p) => {
+        sortedList.map(async (p) => {
           const resolvedUrls = await resolveImageUrls(p.image_urls);
           const original = (p.image_urls ?? []).filter(Boolean) as string[];
           return {
