@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '../../supabase';
@@ -95,6 +95,38 @@ export default function RegisterScreen() {
     draft.agreements.privacyPolicy &&
     draft.agreements.pointsPolicy;
 
+  const onPressStep1Next = async () => {
+    if (loading || !step1CanProceed) return;
+
+    const emailToUse = emailTrimmed.toLowerCase();
+    setLoading(true);
+    try {
+      const { count, error } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('email', emailToUse);
+
+      if (error) {
+        Alert.alert('오류', error.message);
+        return;
+      }
+
+      if ((count ?? 0) >= 1) {
+        Alert.alert('이미 사용 중인 이메일이에요');
+        return;
+      }
+
+      // Normalize email before proceeding to later steps.
+      if (draft.email !== emailToUse) {
+        setDraft((prev) => ({ ...prev, email: emailToUse }));
+      }
+
+      goNext();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={layoutStyles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -173,9 +205,7 @@ export default function RegisterScreen() {
             label="다음으로"
             disabled={loading || !step1CanProceed}
             loading={loading}
-            onPress={() => {
-              if (step1CanProceed) goNext();
-            }}
+            onPress={onPressStep1Next}
           />
           </View>
         ) : null}

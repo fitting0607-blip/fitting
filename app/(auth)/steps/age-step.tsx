@@ -17,6 +17,11 @@ function isUserAlreadyRegisteredError(message?: string) {
   return m.includes('user already registered') || m.includes('already registered');
 }
 
+function isUniqueViolationError(err: unknown): err is { code?: string; message?: string } {
+  if (!err || typeof err !== 'object') return false;
+  return 'code' in err || 'message' in err;
+}
+
 export function AgeStep({
   draft,
   setDraft,
@@ -54,20 +59,10 @@ export function AgeStep({
       if (signUpError) {
         console.log('[age] signUp 에러:', signUpError.message);
 
-        // 이미 가입된 계정이면 회원가입 에러로 처리하지 않고 로그인 시도
+        // 이메일 중복(이미 가입된 계정)
         if (isUserAlreadyRegisteredError(signUpError.message)) {
-          console.log('[age] 이미 가입된 계정, signIn 시도');
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: draft.email,
-            password: draft.password,
-          });
-          if (signInError) {
-            console.log('[age] signIn 에러:', signInError.message);
-            Alert.alert('로그인 실패', signInError.message);
-            return;
-          }
-          userId = signInData.user?.id;
-          console.log('[age] signIn 성공, user:', userId);
+          Alert.alert('회원가입 실패', '이미 사용 중인 이메일이에요');
+          return;
         } else {
           Alert.alert('회원가입 실패', signUpError.message);
           return;
@@ -138,6 +133,10 @@ export function AgeStep({
 
       if (updateError) {
         console.log('[age] update 에러:', updateError.message);
+        if (isUniqueViolationError(updateError) && updateError.code === '23505') {
+          Alert.alert('저장 실패', '이미 사용 중인 닉네임이에요');
+          return;
+        }
         Alert.alert('저장 실패', updateError.message);
         return;
       }
