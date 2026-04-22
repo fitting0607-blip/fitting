@@ -27,6 +27,9 @@
   - 신고 목록 페이지 (처리 완료/처리 대기 탭)
   - 신고 처리 완료 버튼 (reports.processed_at 업데이트)
   - admin_select_reports, admin_update_reports RLS 정책 추가
+  - 상품 관리 페이지 (매칭권/피티권 탭, 등록/수정/삭제/노출상태 토글)
+  - 원가 + 할인율 입력 시 가격 자동 계산
+  - admin INSERT/UPDATE/DELETE products RLS 정책 추가
   - 사이드바 레이아웃 (유저목록, 피티유저, 신고목록, 상품관리, 배너관리, 약관관리)
 - 홈 피드 (게시물 카드, 배너, 좋아요, 매칭하기, 덤벨 버튼)
 - 홈 피드 필터 및 정렬:
@@ -48,6 +51,7 @@
 - 리워드 탭 (보유 매칭권/포인트 카드, 상점, 포인트→매칭권 교환, 출석체크/광고시청/친구초대 미션)
 - 상점 화면 (홈 상단 버튼, 리워드 탭 매칭권 구매 버튼으로 진입)
 - 상점 피티권 탭 추가 (승인된 트레이너만 구매 가능)
+- 상점 상품 카드 원가 취소선 + 할인가 + 할인율 뱃지 표시
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
@@ -86,6 +90,7 @@
 - users 테이블 is_admin 컬럼 추가 (boolean, default false)
 - users 테이블 phone 컬럼 추가 (text)
 - products 테이블 생성 (상품 관리용)
+- products 테이블 original_price 컬럼 추가
 - reports 테이블 processed_at 컬럼 추가
 
 ### RLS 보안

@@ -22,6 +22,7 @@ type StoreItem = {
   title: string;
   ticket_count: number;
   price: number;
+  original_price: number;
   discount_rate: number;
   bonus_points: number;
 };
@@ -75,7 +76,7 @@ export default function StoreScreen() {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('id,title,ticket_count,price,discount_rate,bonus_points')
+        .select('id,title,ticket_count,original_price,price,discount_rate,bonus_points')
         .eq('category', category)
         .eq('is_active', true)
         .order('price', { ascending: true });
@@ -85,6 +86,7 @@ export default function StoreScreen() {
         id: string;
         title: string | null;
         ticket_count: number | null;
+        original_price: number | null;
         price: number | null;
         discount_rate: number | null;
         bonus_points: number | null;
@@ -97,6 +99,7 @@ export default function StoreScreen() {
             id: r.id,
             title: r.title ?? (category === 'pt_ticket' ? '피티권' : '매칭권'),
             ticket_count: typeof r.ticket_count === 'number' ? r.ticket_count : 0,
+            original_price: typeof r.original_price === 'number' ? r.original_price : 0,
             price: typeof r.price === 'number' ? r.price : 0,
             discount_rate: typeof r.discount_rate === 'number' ? r.discount_rate : 0,
             bonus_points: typeof r.bonus_points === 'number' ? r.bonus_points : 0,
@@ -264,6 +267,12 @@ export default function StoreScreen() {
                     accessibilityLabel: item.title,
                   };
 
+            const hasDiscount =
+              item.original_price > 0 &&
+              item.price > 0 &&
+              item.original_price > item.price &&
+              item.discount_rate > 0;
+
             return (
               <RowWrap key={item.id} {...(wrapProps as any)}>
               <View style={styles.rowLeft}>
@@ -275,14 +284,23 @@ export default function StoreScreen() {
                 <View style={styles.rowBody}>
                   <View style={styles.rowTitleLine}>
                     <Text style={styles.rowTitle}>{item.title}</Text>
-                    {item.discount_rate > 0 ? (
+                    {tab === 'matching' && hasDiscount ? (
                       <View style={styles.badge}>
                         <Text style={styles.badgeText}>{item.discount_rate}%</Text>
                       </View>
                     ) : null}
                   </View>
                   <View style={styles.metaLine}>
-                    <Text style={styles.priceText}>₩{formatKRW(item.price)}</Text>
+                    {tab === 'matching' && hasDiscount ? (
+                      <>
+                        <Text style={styles.originalPriceText}>
+                          ₩{formatKRW(item.original_price)}
+                        </Text>
+                        <Text style={styles.priceText}>₩{formatKRW(item.price)}</Text>
+                      </>
+                    ) : (
+                      <Text style={styles.priceText}>₩{formatKRW(item.price)}</Text>
+                    )}
                     {item.bonus_points > 0 ? (
                       <Text style={styles.bonusText}>+{formatKRW(item.bonus_points)}포인트 적립</Text>
                     ) : null}
@@ -480,6 +498,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#111111',
+  },
+  originalPriceText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
   },
   metaLine: {
     flexDirection: 'row',
