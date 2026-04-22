@@ -33,6 +33,9 @@
   - 배너 관리 페이지 (등록/수정/삭제/노출상태 토글)
   - 배너 이미지 업로드 시 670:240 비율 크롭 기능 (react-easy-crop)
   - Supabase Storage banners 버킷 연동
+  - 약관 관리 페이지 (서비스 이용약관/개인정보 처리방침/포인트 정책 탭)
+  - 약관 내용 편집 및 저장 (terms 테이블 upsert)
+  - 마지막 업데이트 일자 표시
   - 사이드바 레이아웃 (유저목록, 피티유저, 신고목록, 상품관리, 배너관리, 약관관리)
 - 홈 피드 (게시물 카드, 배너, 좋아요, 매칭하기, 덤벨 버튼)
   - 홈 배너 Supabase banners 테이블 연동 (is_active=true만 표시)
@@ -94,6 +97,7 @@
 - public.trainer_profiles (id, user_id, facility_name, facility_addr, facility_addr_detail, intro, latitude, longitude, status, is_approved, facility_images, cert_images, profile_images, created_at, updated_at)
 - public.products (상품 관리용)
 - public.banners (id, title, image_url, click_url, is_active, created_at)
+- public.terms (id, type, content, updated_at)
 
 ### DB 변경
 - users 테이블 is_admin 컬럼 추가 (boolean, default false)
@@ -113,6 +117,7 @@
   - users: 로그인 유저 전체 조회, 본인만 UPDATE
 - admin_delete_users, admin_delete_posts RLS 정책 추가
 - banners RLS 정책 추가 (전체 조회, 관리자만 CUD)
+- terms RLS 정책 추가 (전체 조회, 관리자만 INSERT/UPDATE)
 
 ### Realtime 활성화
 - messages, notifications
@@ -139,6 +144,7 @@
 - app/store.tsx (상점)
 - app/(tabs)/my.tsx
 - app/settings.tsx
+- app/terms/[type].tsx (service/privacy/point)
 - app/profile-edit.tsx
 - app/post-create.tsx
 - app/post-detail.tsx

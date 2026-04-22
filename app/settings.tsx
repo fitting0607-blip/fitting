@@ -77,19 +77,19 @@ export default function SettingsScreen() {
         <View style={styles.sectionBox}>
           <Row
             label="서비스 이용약관"
-            onPress={todo}
+            onPress={() => router.push('/terms/service' as any)}
             rightSlot={<Feather name="external-link" size={16} color="#9CA3AF" />}
           />
           <View style={styles.divider} />
           <Row
             label="개인정보처리방침"
-            onPress={todo}
+            onPress={() => router.push('/terms/privacy' as any)}
             rightSlot={<Feather name="external-link" size={16} color="#9CA3AF" />}
           />
           <View style={styles.divider} />
           <Row
             label="포인트 정책 관련"
-            onPress={todo}
+            onPress={() => router.push('/terms/point' as any)}
             rightSlot={<Feather name="external-link" size={16} color="#9CA3AF" />}
           />
         </View>
