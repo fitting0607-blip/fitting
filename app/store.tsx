@@ -33,6 +33,10 @@ export default function StoreScreen() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<StoreItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
+  const [tab, setTab] = useState<'matching' | 'pt'>('matching');
+
+  const [myPtEligible, setMyPtEligible] = useState(false);
+  const [myPtLoading, setMyPtLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,32 +70,32 @@ export default function StoreScreen() {
     }
   }, []);
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async (category: 'matching_ticket' | 'pt_ticket') => {
     setProductsLoading(true);
     try {
       const { data, error } = await supabase
         .from('products')
         .select('id,title,ticket_count,price,discount_rate,bonus_points')
-        .eq('category', 'matching_ticket')
+        .eq('category', category)
         .eq('is_active', true)
         .order('price', { ascending: true });
       if (error) throw error;
 
-      const rows = (data ?? []) as Array<{
+      const rows = (data ?? []) as {
         id: string;
         title: string | null;
         ticket_count: number | null;
         price: number | null;
         discount_rate: number | null;
         bonus_points: number | null;
-      }>;
+      }[];
 
       setProducts(
         rows
           .filter((r) => !!r?.id)
           .map((r) => ({
             id: r.id,
-            title: r.title ?? '매칭권',
+            title: r.title ?? (category === 'pt_ticket' ? '피티권' : '매칭권'),
             ticket_count: typeof r.ticket_count === 'number' ? r.ticket_count : 0,
             price: typeof r.price === 'number' ? r.price : 0,
             discount_rate: typeof r.discount_rate === 'number' ? r.discount_rate : 0,
@@ -106,17 +110,55 @@ export default function StoreScreen() {
     }
   }, []);
 
+  const loadMyPt = useCallback(async () => {
+    setMyPtLoading(true);
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user?.id) {
+        setMyPtEligible(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('trainer_profiles')
+        .select('status,is_approved,created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+
+      const status = String((data as any)?.status ?? '').trim();
+      const isApproved = (data as any)?.is_approved;
+      const eligible = status === 'approved' && isApproved === false;
+      setMyPtEligible(eligible);
+    } catch {
+      setMyPtEligible(false);
+    } finally {
+      setMyPtLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       void load();
-      void loadProducts();
-    }, [load, loadProducts])
+      void loadMyPt();
+      void loadProducts(tab === 'pt' ? 'pt_ticket' : 'matching_ticket');
+    }, [load, loadMyPt, loadProducts, tab])
   );
 
   const goBack = useCallback(() => router.back(), [router]);
 
   const onItemPress = useCallback(() => {
     Alert.alert('준비 중입니다');
+  }, []);
+
+  const buyPt = useCallback(() => {
+    Alert.alert('결제 기능은 준비 중입니다.');
   }, []);
 
   const formatKRW = useCallback((value: number) => {
@@ -170,7 +212,32 @@ export default function StoreScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionLabel}>매칭권 구매</Text>
+        <View style={styles.tabBar}>
+          <Pressable
+            onPress={() => setTab('matching')}
+            style={[styles.tabBtn, tab === 'matching' && styles.tabBtnActive]}
+            accessibilityRole="button"
+            accessibilityLabel="매칭권 탭"
+          >
+            <Text style={[styles.tabText, tab === 'matching' && styles.tabTextActive]}>매칭권</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setTab('pt')}
+            style={[styles.tabBtn, tab === 'pt' && styles.tabBtnActive]}
+            accessibilityRole="button"
+            accessibilityLabel="피티권 탭"
+          >
+            <Text style={[styles.tabText, tab === 'pt' && styles.tabTextActive]}>피티권</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.sectionLabel}>{tab === 'pt' ? '피티권 구매' : '매칭권 구매'}</Text>
+
+        {tab === 'pt' && !myPtLoading && !myPtEligible ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>승인된 트레이너만 구매 가능합니다</Text>
+          </View>
+        ) : null}
 
         {productsLoading ? (
           <View style={styles.productsLoading}>
@@ -182,14 +249,23 @@ export default function StoreScreen() {
             <Text style={styles.productsEmptyText}>현재 구매 가능한 상품이 없습니다.</Text>
           </View>
         ) : (
-          products.map((item) => (
-            <Pressable
-              key={item.id}
-              onPress={onItemPress}
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              accessibilityRole="button"
-              accessibilityLabel={item.title}
-            >
+          products.map((item) => {
+            const RowWrap = tab === 'pt' ? View : Pressable;
+            const wrapProps =
+              tab === 'pt'
+                ? {
+                    style: styles.row,
+                  }
+                : {
+                    onPress: onItemPress,
+                    style: ({ pressed }: { pressed: boolean }) =>
+                      [styles.row, pressed && styles.rowPressed] as any,
+                    accessibilityRole: 'button' as const,
+                    accessibilityLabel: item.title,
+                  };
+
+            return (
+              <RowWrap key={item.id} {...(wrapProps as any)}>
               <View style={styles.rowLeft}>
                 <View style={styles.iconWrap}>
                   <Text style={styles.dumbbellIcon} accessibilityLabel="매칭권">
@@ -213,9 +289,24 @@ export default function StoreScreen() {
                   </View>
                 </View>
               </View>
-              <Feather name="chevron-right" size={20} color="#9CA3AF" />
-            </Pressable>
-          ))
+              {tab === 'pt' ? (
+                <Pressable
+                  onPress={buyPt}
+                  disabled={!myPtEligible}
+                  style={[styles.buyBtn, !myPtEligible && styles.buyBtnDisabled]}
+                  accessibilityRole="button"
+                  accessibilityLabel="구매"
+                >
+                  <Text style={[styles.buyBtnText, !myPtEligible && styles.buyBtnTextDisabled]}>
+                    구매
+                  </Text>
+                </Pressable>
+              ) : (
+                <Feather name="chevron-right" size={20} color="#9CA3AF" />
+              )}
+              </RowWrap>
+            );
+          })
         )}
       </ScrollView>
     </SafeAreaView>
@@ -297,6 +388,46 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 10,
   },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 999,
+    padding: 4,
+    gap: 6,
+    marginBottom: 12,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBtnActive: {
+    backgroundColor: MAIN,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#6B7280',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
+  noticeCard: {
+    backgroundColor: 'rgba(108, 71, 255, 0.08)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(108, 71, 255, 0.18)',
+    marginBottom: 10,
+  },
+  noticeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: MAIN,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -371,6 +502,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
+  },
+  buyBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: MAIN,
+  },
+  buyBtnDisabled: {
+    backgroundColor: '#E5E7EB',
+  },
+  buyBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  buyBtnTextDisabled: {
+    color: '#6B7280',
   },
   productsLoading: {
     flexDirection: 'row',

@@ -67,7 +67,7 @@ type PlacePrediction = {
   };
 };
 
-type MyTrainerStatus = 'pending' | 'approved' | 'paid';
+type MyTrainerRow = { id: string; status: string | null; is_approved: boolean | null };
 
 export default function MapScreen() {
   const router = useRouter();
@@ -80,7 +80,7 @@ export default function MapScreen() {
   const [listLoading, setListLoading] = useState(true);
   const [areaLabel, setAreaLabel] = useState('위치 확인 중');
 
-  const [myTrainer, setMyTrainer] = useState<{ id: string; status: MyTrainerStatus } | null>(null);
+  const [myTrainer, setMyTrainer] = useState<MyTrainerRow | null>(null);
   const [myTrainerLoading, setMyTrainerLoading] = useState(true);
   const [myTrainerBusy, setMyTrainerBusy] = useState(false);
 
@@ -152,8 +152,8 @@ export default function MapScreen() {
         .select(
           'id, user_id, facility_name, facility_addr, facility_addr_detail, intro, latitude, longitude, status, is_approved, facility_images, cert_images, profile_images'
         )
-        // paid(노출) 우선. 기존 데이터 호환을 위해 is_approved=true도 허용.
-        .or('status.eq.paid,is_approved.eq.true');
+        // 등록 완료(노출): status='approved' AND is_approved=true. 레거시 데이터(status='paid')도 노출 유지.
+        .or('and(status.eq.approved,is_approved.eq.true),status.eq.paid');
 
       if (error) throw error;
 
@@ -203,7 +203,7 @@ export default function MapScreen() {
 
       const { data, error } = await supabase
         .from('trainer_profiles')
-        .select('id, status, created_at')
+        .select('id, status, is_approved, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -216,14 +216,10 @@ export default function MapScreen() {
       }
 
       const raw = String((data as any).status ?? '').trim();
-      const status: MyTrainerStatus | null =
-        raw === 'pending' || raw === 'approved' || raw === 'paid' ? (raw as MyTrainerStatus) : null;
+      const isApproved: boolean | null =
+        typeof (data as any).is_approved === 'boolean' ? (data as any).is_approved : null;
 
-      if (!status) {
-        setMyTrainer(null);
-        return;
-      }
-      setMyTrainer({ id: String((data as any).id), status });
+      setMyTrainer({ id: String((data as any).id), status: raw || null, is_approved: isApproved });
     } catch {
       setMyTrainer(null);
     } finally {
@@ -458,16 +454,32 @@ export default function MapScreen() {
             <Text style={styles.cancelBtnText}>등록 취소</Text>
           </Pressable>
         </View>
-      ) : myTrainer?.status === 'approved' ? (
-        <Pressable
-          style={styles.registerBtn}
-          onPress={() => Alert.alert('안내', '결제 기능은 준비 중입니다.')}
-          accessibilityRole="button"
-          accessibilityLabel="결제 대기 중"
-        >
-          <Text style={styles.registerBtnText}>결제 대기 중</Text>
-        </Pressable>
-      ) : myTrainer?.status === 'paid' ? null : (
+      ) : myTrainer?.status === 'approved' && myTrainer.is_approved === false ? (
+        <View style={styles.headerRightRow}>
+          <Pressable
+            style={[styles.payBtn, myTrainerBusy && styles.btnDisabled]}
+            onPress={() => router.push('/store' as Href)}
+            accessibilityRole="button"
+            accessibilityLabel="결제하기"
+            disabled={myTrainerBusy}
+          >
+            <Text style={styles.payBtnText}>결제하기</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.headerActionCancelBtn, myTrainerBusy && styles.btnDisabled]}
+            onPress={cancelRegistration}
+            accessibilityRole="button"
+            accessibilityLabel="등록 취소"
+            disabled={myTrainerBusy}
+          >
+            <Text style={styles.headerActionCancelBtnText}>등록 취소</Text>
+          </Pressable>
+        </View>
+      ) : myTrainer?.status === 'approved' && myTrainer.is_approved === true ? (
+        <View style={styles.statePill}>
+          <Text style={styles.statePillText}>등록 완료</Text>
+        </View>
+      ) : (
         <Pressable
           style={styles.registerBtn}
           onPress={() => router.push('/trainer-apply' as Href)}
@@ -720,7 +732,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    maxWidth: '62%',
+    maxWidth: '50%',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
@@ -757,6 +769,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   statePill: {
     paddingHorizontal: 12,
@@ -783,6 +797,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: '#EF4444',
+  },
+  payBtn: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: '#6C47FF',
+  },
+  payBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  headerActionCancelBtn: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  headerActionCancelBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#EF4444',
+    textAlign: 'center',
   },
   btnDisabled: {
     opacity: 0.6,
