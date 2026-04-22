@@ -1,7 +1,19 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
@@ -68,70 +80,94 @@ export default function ReportScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          style={styles.headerBtn}
-          accessibilityRole="button"
-          accessibilityLabel="뒤로가기"
-        >
-          <Feather name="chevron-left" size={24} color="#111111" />
-        </Pressable>
-        <Text style={styles.headerTitle}>신고</Text>
-        <View style={styles.headerBtn} />
-      </View>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.flex}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.scrollContent}
+            >
+              <View style={styles.header}>
+                <Pressable
+                  onPress={() => router.back()}
+                  hitSlop={10}
+                  style={styles.headerBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="뒤로가기"
+                >
+                  <Feather name="chevron-left" size={24} color="#111111" />
+                </Pressable>
+                <Text style={styles.headerTitle}>신고</Text>
+                <View style={styles.headerBtn} />
+              </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>신고 사유</Text>
-        <View style={styles.reasonBox}>
-          {REASONS.map((r) => {
-            const selected = reason === r;
-            return (
-              <Pressable
-                key={r}
-                onPress={() => setReason(r)}
-                style={styles.reasonRow}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={`신고 사유 ${r}`}
-              >
-                <View style={[styles.radio, selected ? styles.radioOn : styles.radioOff]}>
-                  {selected ? <View style={styles.radioDot} /> : null}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>신고 사유</Text>
+                <View style={styles.reasonBox}>
+                  {REASONS.map((r) => {
+                    const selected = reason === r;
+                    return (
+                      <Pressable
+                        key={r}
+                        onPress={() => setReason(r)}
+                        style={styles.reasonRow}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`신고 사유 ${r}`}
+                      >
+                        <View
+                          style={[
+                            styles.radio,
+                            selected ? styles.radioOn : styles.radioOff,
+                          ]}
+                        >
+                          {selected ? <View style={styles.radioDot} /> : null}
+                        </View>
+                        <Text style={styles.reasonLabel}>{r}</Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
-                <Text style={styles.reasonLabel}>{r}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+              </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>상세 내용 (선택)</Text>
-        <TextInput
-          value={detail}
-          onChangeText={setDetail}
-          placeholder="추가로 설명할 내용이 있으면 입력해주세요."
-          placeholderTextColor="#9CA3AF"
-          style={styles.input}
-          multiline
-          textAlignVertical="top"
-          maxLength={500}
-        />
-        <Text style={styles.hint}>{detail.length}/500</Text>
-      </View>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>상세 내용 (선택)</Text>
+                <TextInput
+                  value={detail}
+                  onChangeText={setDetail}
+                  placeholder="추가로 설명할 내용이 있으면 입력해주세요."
+                  placeholderTextColor="#9CA3AF"
+                  style={styles.input}
+                  multiline
+                  textAlignVertical="top"
+                  maxLength={500}
+                />
+                <Text style={styles.hint}>{detail.length}/500</Text>
+              </View>
 
-      <View style={styles.bottom}>
-        <Pressable
-          onPress={() => void submit()}
-          disabled={!canSubmit}
-          style={[styles.submitBtn, !canSubmit ? styles.submitBtnDisabled : null]}
-          accessibilityRole="button"
-          accessibilityLabel="신고하기"
-        >
-          <Text style={styles.submitText}>{submitting ? '신고 중…' : '신고하기'}</Text>
-        </Pressable>
-      </View>
+              <View style={styles.bottom}>
+                <Pressable
+                  onPress={() => void submit()}
+                  disabled={!canSubmit}
+                  style={[
+                    styles.submitBtn,
+                    !canSubmit ? styles.submitBtnDisabled : null,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="신고하기"
+                >
+                  <Text style={styles.submitText}>
+                    {submitting ? '신고 중…' : '신고하기'}
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -141,6 +177,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
+  },
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   header: {
     paddingTop: 8,

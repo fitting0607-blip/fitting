@@ -24,6 +24,9 @@
   - auth 타임아웃 추가 (3초, 회사 네트워크 대응)
   - admin_select_all_posts RLS 정책 추가
   - admin_update_trainer_profiles RLS 정책 추가
+  - 신고 목록 페이지 (처리 완료/처리 대기 탭)
+  - 신고 처리 완료 버튼 (reports.processed_at 업데이트)
+  - admin_select_reports, admin_update_reports RLS 정책 추가
   - 사이드바 레이아웃 (유저목록, 피티유저, 신고목록, 상품관리, 배너관리, 약관관리)
 - 홈 피드 (게시물 카드, 배너, 좋아요, 매칭하기, 덤벨 버튼)
 - 홈 피드 필터 및 정렬:
@@ -50,6 +53,7 @@
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
 - 알림에서 프로필 보기 기능
 - 신고 기능 (신고 사유 6가지, reports 테이블)
+- 신고 화면 키보드 내려가기 수정 (빈 화면 터치 시 Keyboard.dismiss)
 - 차단 기능 (차단/해제, 차단목록, 홈 피드 필터링)
 - 채팅 읽음 처리 (채팅방 진입 시 읽음, 목록 뱃지 사라짐)
 - 지도 탭 (구글맵, 내 위치, 지역 검색, 트레이너 목록 바텀시트)
@@ -82,6 +86,7 @@
 - users 테이블 is_admin 컬럼 추가 (boolean, default false)
 - users 테이블 phone 컬럼 추가 (text)
 - products 테이블 생성 (상품 관리용)
+- reports 테이블 processed_at 컬럼 추가
 
 ### RLS 보안
 - likes, chat_rooms, messages, point_logs, notifications → RLS 활성화 완료
