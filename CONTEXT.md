@@ -16,6 +16,10 @@
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
   - Supabase 연동
   - 관리자 로그인 (is_admin 권한 체크)
+  - 대시보드 페이지 (총 유저수, 오늘 가입자, 게시물수, 신고건수, 트레이너 승인대기, 매칭수, 오늘매출)
+  - 피드 관리 페이지 (일반/바디 탭, 게시물 목록, 이미지 썸네일, 신고횟수, 삭제)
+  - 결제 정보 관리 페이지 (결제 목록, 상세보기)
+  - 30초 자동 새로고침
   - 유저목록 페이지 (조회/검색/상세보기/삭제)
   - 피티 유저 관리 페이지 (승인 완료/결제 대기/승인 대기 탭)
   - 피티 유저 승인 버튼: status = 'approved'로 업데이트
@@ -98,6 +102,7 @@
 - public.products (상품 관리용)
 - public.banners (id, title, image_url, click_url, is_active, created_at)
 - public.terms (id, type, content, updated_at)
+- public.payments (id, user_id, product_id, product_title, amount, status, created_at)
 
 ### DB 변경
 - users 테이블 is_admin 컬럼 추가 (boolean, default false)
@@ -118,6 +123,7 @@
 - admin_delete_users, admin_delete_posts RLS 정책 추가
 - banners RLS 정책 추가 (전체 조회, 관리자만 CUD)
 - terms RLS 정책 추가 (전체 조회, 관리자만 INSERT/UPDATE)
+- payments RLS 정책 추가 (관리자 전체 조회, 유저 본인 조회)
 
 ### Realtime 활성화
 - messages, notifications
