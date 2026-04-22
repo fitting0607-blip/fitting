@@ -12,6 +12,7 @@ import {
   Image as RNImage,
   Alert,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -53,8 +54,8 @@ type PostFeedRow = {
 
 type Banner = {
   id: string;
-  titleTop: string;
-  titleMain: string;
+  image_url: string;
+  click_url: string | null;
 };
 
 type TagKind = 'sport' | 'frequency' | 'goal';
@@ -65,6 +66,7 @@ const ATTENDANCE_MODAL_MAIN = '#6C47FF';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BANNER_RATIO = 240 / 670;
 const MAX_FEED_WIDTH_WEB = 430;
+const BANNER_WRAP_PADDING_BOTTOM = 14;
 
 function getTodayRangeISO() {
   const start = new Date();
@@ -81,7 +83,6 @@ export default function HomeScreen() {
   const [posts, setPosts] = useState<PostFeedRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [feedListWidth, setFeedListWidth] = useState(0);
-  const [bannerWidth, setBannerWidth] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [feedBarHeight, setFeedBarHeight] = useState(0);
   const [bannerWrapHeight, setBannerWrapHeight] = useState(0);
@@ -91,6 +92,8 @@ export default function HomeScreen() {
 
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const bannerListRef = React.useRef<FlatList<Banner> | null>(null);
+  const bannerTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [composeModalVisible, setComposeModalVisible] = useState(false);
   const [composeModalTitle, setComposeModalTitle] = useState('게시물을 작성하시겠어요?');
   const [openingProfile, setOpeningProfile] = useState(false);
@@ -234,8 +237,8 @@ export default function HomeScreen() {
   );
 
   const bannerHeight = useMemo(() => {
-    return bannerWidth > 0 ? Math.round(bannerWidth * BANNER_RATIO) : 0;
-  }, [bannerWidth]);
+    return Math.round(SCREEN_WIDTH * BANNER_RATIO);
+  }, []);
 
   const cardHeight = useMemo(() => {
     const taken = headerHeight + feedBarHeight + bannerWrapHeight + tabBarHeight;
@@ -252,9 +255,23 @@ export default function HomeScreen() {
   }, [feedListWidth]);
 
   const loadBanners = useCallback(async (): Promise<Banner[]> => {
-    // TODO: Supabase 연동 예정
-    // Temporary dummy banner (design reference)
-    return [{ id: 'dummy_event', titleTop: 'EVENT', titleMain: '' }];
+    // NOTE: 앱 홈 탭 배너는 슬라이드 형식이며, 등록된 배너 중 is_active = true인 것만 앱에 표시됩니다.
+    const { data, error } = await supabase
+      .from('banners')
+      .select('id,image_url,click_url,is_active,created_at')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const list = (Array.isArray(data) ? data : [])
+      .map((r: any) => ({
+        id: String(r?.id ?? '').trim(),
+        image_url: String(r?.image_url ?? '').trim(),
+        click_url: r?.click_url ? String(r.click_url).trim() : null,
+      }))
+      .filter((r) => r.id.length > 0 && r.image_url.length > 0);
+
+    return list;
   }, []);
 
   const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
@@ -469,6 +486,44 @@ export default function HomeScreen() {
     };
   }, [loadBanners]);
 
+  useEffect(() => {
+    setBannerWrapHeight(banners.length > 0 ? bannerHeight + BANNER_WRAP_PADDING_BOTTOM : 0);
+  }, [bannerHeight, banners.length]);
+
+  const clearBannerTimer = useCallback(() => {
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+      bannerTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleNextBanner = useCallback(
+    (reason: 'mount' | 'reset' | 'tick') => {
+      clearBannerTimer();
+      if (banners.length <= 1) return;
+      // keep a single-shot timer so we can easily "reset" on user swipe
+      bannerTimerRef.current = setTimeout(() => {
+        const next = (currentBannerIndex + 1) % banners.length;
+        try {
+          bannerListRef.current?.scrollToOffset({
+            offset: SCREEN_WIDTH * next,
+            animated: true,
+          });
+        } catch {
+          // ignore
+        }
+        // schedule again after advancing
+        scheduleNextBanner('tick');
+      }, 3000);
+    },
+    [banners.length, clearBannerTimer, currentBannerIndex]
+  );
+
+  useEffect(() => {
+    scheduleNextBanner('mount');
+    return () => clearBannerTimer();
+  }, [banners.length, scheduleNextBanner, clearBannerTimer]);
+
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
@@ -619,45 +674,62 @@ export default function HomeScreen() {
     ]
   );
 
-  const renderBanner = useCallback(({ item }: { item: Banner }) => {
-    return (
-      <View
-        style={[
-          styles.bannerCard,
-          bannerWidth ? { width: bannerWidth } : null,
-          bannerHeight ? { height: bannerHeight } : null,
-        ]}
-      >
-        <View style={styles.bannerLeft}>
-          <Text style={styles.bannerEvent}>{item.titleTop}</Text>
-          {item.titleMain ? <Text style={styles.bannerTitle}>{item.titleMain}</Text> : null}
-        </View>
+  const renderBanner = useCallback(
+    ({ item }: { item: Banner }) => {
+      return (
+        <Pressable
+          onPress={() => {
+            const url = item.click_url?.trim();
+            if (!url) return;
+            void (async () => {
+              try {
+                await Linking.openURL(url);
+              } catch (e: any) {
+                Alert.alert('이동 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+              }
+            })();
+          }}
+          style={[styles.bannerCard, { width: SCREEN_WIDTH, height: bannerHeight }]}
+          accessibilityRole={item.click_url ? 'button' : 'image'}
+          accessibilityLabel="홈 배너"
+        >
+          <RNImage
+            source={{ uri: item.image_url }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+          <View style={styles.bannerImageOverlay} />
 
-        <View style={styles.bannerRight}>
-          <View style={[styles.ticket, styles.ticketBack]}>
-            <Text style={styles.ticketText}>POINT</Text>
-          </View>
-          <View style={[styles.ticket, styles.ticketFront]}>
-            <Text style={styles.ticketText}>1 POINT</Text>
-            <View style={styles.ticketBadge}>
-              <Feather name="heart" size={12} color="#FFFFFF" />
+          {banners.length > 1 ? (
+            <View style={styles.bannerDots} pointerEvents="none">
+              {banners.map((_, i) => (
+                <View
+                  key={`dot_${i}`}
+                  style={[
+                    styles.bannerDot,
+                    i === currentBannerIndex ? styles.bannerDotActive : styles.bannerDotInactive,
+                  ]}
+                />
+              ))}
             </View>
-          </View>
-        </View>
-
-        <Text style={styles.bannerPager}>
-          {banners.length === 0 ? '' : `${currentBannerIndex + 1} / ${banners.length}`}
-        </Text>
-      </View>
-    );
-  }, [bannerHeight, bannerWidth, banners.length, currentBannerIndex]);
+          ) : null}
+        </Pressable>
+      );
+    },
+    [bannerHeight, banners.length, currentBannerIndex]
+  );
 
   const onBannerMomentumEnd = useCallback((e: any) => {
     const x = e?.nativeEvent?.contentOffset?.x ?? 0;
-    const denom = bannerWidth > 0 ? bannerWidth : SCREEN_WIDTH - 32;
+    const denom = SCREEN_WIDTH;
     const idx = Math.round(x / denom);
     setCurrentBannerIndex(Math.max(0, Math.min(idx, Math.max(0, banners.length - 1))));
-  }, [bannerWidth, banners.length]);
+    scheduleNextBanner('reset');
+  }, [banners.length]);
+
+  const onBannerScrollBeginDrag = useCallback(() => {
+    scheduleNextBanner('reset');
+  }, [scheduleNextBanner]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -789,17 +861,14 @@ export default function HomeScreen() {
         </Pressable>
       </Modal>
 
-      <View
-        style={[styles.bannerWrap, bannerHeight ? { height: bannerHeight } : null]}
-        onLayout={(e) => {
-          setBannerWidth(e.nativeEvent.layout.width);
-          setBannerWrapHeight(e.nativeEvent.layout.height);
-        }}
-      >
-        {banners.length === 0 ? (
-          <View style={[styles.bannerPlaceholder, bannerHeight ? { height: bannerHeight } : null]} />
-        ) : (
+      {banners.length > 0 ? (
+        <View
+          style={[styles.bannerWrap, { height: bannerHeight + BANNER_WRAP_PADDING_BOTTOM }]}
+        >
           <FlatList
+            ref={(ref) => {
+              bannerListRef.current = ref;
+            }}
             data={banners}
             keyExtractor={(item) => item.id}
             renderItem={renderBanner}
@@ -809,9 +878,18 @@ export default function HomeScreen() {
             decelerationRate="fast"
             bounces={false}
             onMomentumScrollEnd={onBannerMomentumEnd}
+            onScrollBeginDrag={onBannerScrollBeginDrag}
+            snapToInterval={SCREEN_WIDTH}
+            snapToAlignment="start"
+            disableIntervalMomentum
+            getItemLayout={(_, index) => ({
+              length: SCREEN_WIDTH,
+              offset: SCREEN_WIDTH * index,
+              index,
+            })}
           />
-        )}
-      </View>
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.emptyWrap}>
@@ -940,90 +1018,41 @@ const styles = StyleSheet.create({
   },
 
   bannerWrap: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+    width: SCREEN_WIDTH,
+    paddingBottom: BANNER_WRAP_PADDING_BOTTOM,
   },
   bannerPlaceholder: {
     height: 1,
   },
   bannerCard: {
-    width: SCREEN_WIDTH - 32,
     borderRadius: 18,
-    backgroundColor: '#5B4FE9',
+    backgroundColor: '#E5E7EB',
     overflow: 'hidden',
-    paddingHorizontal: 16,
-    paddingTop: 14,
   },
-  bannerLeft: {
-    paddingRight: 140,
+  bannerImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
-  bannerEvent: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  bannerTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '800',
-    marginTop: 10,
-    lineHeight: 26,
-  },
-  bannerRight: {
-    position: 'absolute',
-    right: 14,
-    top: 32,
-    width: 160,
-    height: 90,
-  },
-  ticket: {
-    position: 'absolute',
-    width: 108,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-  },
-  ticketBack: {
-    right: 0,
-    top: 18,
-    transform: [{ rotate: '12deg' }],
-    opacity: 0.9,
-  },
-  ticketFront: {
-    right: 44,
-    top: 6,
-    transform: [{ rotate: '-10deg' }],
-  },
-  ticketText: {
-    color: '#111111',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  ticketBadge: {
-    position: 'absolute',
-    right: 8,
-    top: 8,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: MAIN,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bannerPager: {
+  bannerDots: {
     position: 'absolute',
     bottom: 10,
     left: 0,
     right: 0,
-    textAlign: 'center',
-    color: 'rgba(0,0,0,0.45)',
-    fontSize: 14,
-    fontWeight: '700',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  bannerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  bannerDotActive: {
+    backgroundColor: 'rgba(255,255,255,1)',
+  },
+  bannerDotInactive: {
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
 
   cardShell: {

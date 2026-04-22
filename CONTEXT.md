@@ -30,8 +30,16 @@
   - 상품 관리 페이지 (매칭권/피티권 탭, 등록/수정/삭제/노출상태 토글)
   - 원가 + 할인율 입력 시 가격 자동 계산
   - admin INSERT/UPDATE/DELETE products RLS 정책 추가
+  - 배너 관리 페이지 (등록/수정/삭제/노출상태 토글)
+  - 배너 이미지 업로드 시 670:240 비율 크롭 기능 (react-easy-crop)
+  - Supabase Storage banners 버킷 연동
   - 사이드바 레이아웃 (유저목록, 피티유저, 신고목록, 상품관리, 배너관리, 약관관리)
 - 홈 피드 (게시물 카드, 배너, 좋아요, 매칭하기, 덤벨 버튼)
+  - 홈 배너 Supabase banners 테이블 연동 (is_active=true만 표시)
+  - 배너 비율 670:240 고정
+  - 배너 클릭 시 click_url로 이동 (Linking.openURL)
+  - dot 인디케이터 (흰색 점)
+  - 3초 자동 슬라이드 (수동 넘기면 타이머 초기화)
 - 홈 피드 필터 및 정렬:
   - 성별 필터 (남성=여성 게시물만, 여성=남성 게시물만)
   - 이미 매칭한 유저 게시물 제외
@@ -85,6 +93,7 @@
 - public.blocks (id, blocker_id, blocked_id, created_at)
 - public.trainer_profiles (id, user_id, facility_name, facility_addr, facility_addr_detail, intro, latitude, longitude, status, is_approved, facility_images, cert_images, profile_images, created_at, updated_at)
 - public.products (상품 관리용)
+- public.banners (id, title, image_url, click_url, is_active, created_at)
 
 ### DB 변경
 - users 테이블 is_admin 컬럼 추가 (boolean, default false)
@@ -92,6 +101,7 @@
 - products 테이블 생성 (상품 관리용)
 - products 테이블 original_price 컬럼 추가
 - reports 테이블 processed_at 컬럼 추가
+- banners 테이블 생성 (id, title, image_url, click_url, is_active, created_at)
 
 ### RLS 보안
 - likes, chat_rooms, messages, point_logs, notifications → RLS 활성화 완료
@@ -102,6 +112,7 @@
   - posts: is_deleted=false 전체 조회, 본인만 INSERT/UPDATE/DELETE
   - users: 로그인 유저 전체 조회, 본인만 UPDATE
 - admin_delete_users, admin_delete_posts RLS 정책 추가
+- banners RLS 정책 추가 (전체 조회, 관리자만 CUD)
 
 ### Realtime 활성화
 - messages, notifications
