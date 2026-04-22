@@ -1,5 +1,5 @@
 import { type Session, type User } from '@supabase/supabase-js'
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 type AuthState = {
@@ -14,11 +14,12 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null)
 
 async function fetchIsAdmin(userId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('is_admin')
-    .eq('id', userId)
-    .maybeSingle()
+  const { data, error } = await Promise.race([
+    supabase.from('users').select('is_admin').eq('id', userId).maybeSingle(),
+    new Promise<{ data: null; error: null }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: null }), 3000),
+    ),
+  ])
 
   if (error) return false
   return Boolean(data?.is_admin)
@@ -28,6 +29,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
+  const lastUserIdRef = useRef<string | null>(null)
+  const lastIsAdminRef = useRef<boolean>(false)
 
   const refreshAdminStatus = async (userId?: string): Promise<boolean> => {
     const resolvedUserId = userId ?? session?.user?.id
@@ -35,7 +38,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAdmin(false)
       return false
     }
-    const admin = await fetchIsAdmin(resolvedUserId)
+    const admin = await Promise.race([
+      fetchIsAdmin(resolvedUserId),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+    ])
     setIsAdmin(admin)
     return admin
   }
@@ -44,35 +50,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let alive = true
 
     const init = async () => {
+      console.log('[auth] init start')
+      console.log('[auth] supabase url:', import.meta.env.VITE_SUPABASE_URL)
       setLoading(true)
-      const { data } = await supabase.auth.getSession()
-      if (!alive) return
-
-      setSession(data.session ?? null)
-      if (data.session?.user?.id) {
-        const admin = await fetchIsAdmin(data.session.user.id)
+      try {
+        const { data } = (await Promise.race([
+          supabase.auth.getSession(),
+          new Promise<{ data: { session: null } }>((resolve) =>
+            setTimeout(() => resolve({ data: { session: null } }), 3000),
+          ),
+        ])) as { data: { session: Session | null } }
+        console.log('[auth] getSession result:', data)
         if (!alive) return
-        setIsAdmin(admin)
-      } else {
-        setIsAdmin(false)
+
+        const nextSession = data.session ?? null
+        const nextUserId = nextSession?.user?.id ?? null
+
+        setSession(nextSession)
+        lastUserIdRef.current = nextUserId
+
+        if (nextUserId) {
+          const admin = await fetchIsAdmin(nextUserId)
+          if (!alive) return
+          setIsAdmin(admin)
+          lastIsAdminRef.current = admin
+        } else {
+          setIsAdmin(false)
+          lastIsAdminRef.current = false
+        }
+      } finally {
+        // Ensure loading is cleared even if init bails early.
+        // (React may warn if unmounted; we accept that to guarantee state clears.)
+        console.log('[auth] loading done')
+        setLoading(false)
       }
-      setLoading(false)
     }
 
     void init()
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       if (!alive) return
+      const nextUserId = nextSession?.user?.id ?? null
+
       setSession(nextSession)
-      if (nextSession?.user?.id) {
-        setLoading(true)
-        const admin = await fetchIsAdmin(nextSession.user.id)
-        if (!alive) return
-        setIsAdmin(admin)
-        setLoading(false)
-      } else {
+
+      // After init, don't touch loading. Also avoid needless admin refetches
+      // when the user hasn't changed (e.g. token refresh / app focus changes).
+      if (!nextUserId) {
         setIsAdmin(false)
+        lastUserIdRef.current = null
+        lastIsAdminRef.current = false
+        return
       }
+
+      if (lastUserIdRef.current === nextUserId) {
+        return
+      }
+
+      lastUserIdRef.current = nextUserId
+      const admin = await fetchIsAdmin(nextUserId)
+      if (!alive) return
+      setIsAdmin(admin)
+      lastIsAdminRef.current = admin
     })
 
     return () => {

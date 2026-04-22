@@ -19,6 +19,8 @@ type PostRow = {
   id: string
   user_id: string
   content: string | null
+  post_type: '일반' | '바디' | (string & {})
+  image_urls: string[] | null
   created_at: string
 }
 
@@ -89,6 +91,7 @@ export function UsersPage() {
 
   const [selected, setSelected] = useState<UserRow | null>(null)
   const [modalTab, setModalTab] = useState<'info' | 'posts'>('info')
+  const [postsSubTab, setPostsSubTab] = useState<'일반' | '바디'>('일반')
 
   const [posts, setPosts] = useState<PostRow[]>([])
   const [postsLoading, setPostsLoading] = useState(false)
@@ -136,12 +139,14 @@ export function UsersPage() {
   const openDetail = (u: UserRow) => {
     setSelected(u)
     setModalTab('info')
+    setPostsSubTab('일반')
     setPosts([])
   }
 
   const closeDetail = () => {
     setSelected(null)
     setModalTab('info')
+    setPostsSubTab('일반')
     setPosts([])
   }
 
@@ -154,9 +159,10 @@ export function UsersPage() {
       setPostsLoading(true)
       const { data, error } = await supabase
         .from('posts')
-        .select('id,user_id,content,created_at')
+        .select('id,user_id,post_type,image_urls,content,created_at')
         .eq('user_id', selected.id)
         .eq('is_deleted', false)
+        .eq('post_type', postsSubTab)
         .order('created_at', { ascending: false })
 
       if (!alive) return
@@ -174,7 +180,7 @@ export function UsersPage() {
     return () => {
       alive = false
     }
-  }, [selected, modalTab])
+  }, [selected, modalTab, postsSubTab])
 
   const deleteUser = async (u: UserRow) => {
     const ok = confirm('정말 삭제하시겠습니까?')
@@ -369,6 +375,38 @@ export function UsersPage() {
               </div>
             ) : (
               <div className="mt-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="rounded-full bg-neutral-100 p-1">
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        className={[
+                          'rounded-full px-3 py-2 text-sm font-medium',
+                          postsSubTab === '일반'
+                            ? 'bg-white text-neutral-900 shadow-sm'
+                            : 'text-neutral-600 hover:bg-white',
+                        ].join(' ')}
+                        onClick={() => setPostsSubTab('일반')}
+                      >
+                        일반
+                      </button>
+                      <button
+                        className={[
+                          'rounded-full px-3 py-2 text-sm font-medium',
+                          postsSubTab === '바디'
+                            ? 'bg-white text-neutral-900 shadow-sm'
+                            : 'text-neutral-600 hover:bg-white',
+                        ].join(' ')}
+                        onClick={() => setPostsSubTab('바디')}
+                      >
+                        바디
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-xs text-neutral-500">
+                    {postsSubTab === '일반' ? 'post_type=일반' : 'post_type=바디'}
+                  </div>
+                </div>
+
                 {postsLoading ? (
                   <div className="text-sm text-neutral-500">로딩 중...</div>
                 ) : posts.length === 0 ? (
@@ -384,6 +422,26 @@ export function UsersPage() {
                           <div className="text-xs text-neutral-500">
                             {formatDate(p.created_at)}
                           </div>
+                          {p.image_urls && p.image_urls.length > 0 ? (
+                            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                              {p.image_urls.map((url, idx) => (
+                                <a
+                                  key={`${p.id}-${idx}`}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block overflow-hidden rounded-md border border-neutral-200 bg-neutral-50"
+                                >
+                                  <img
+                                    src={url}
+                                    alt=""
+                                    className="h-24 w-full object-cover"
+                                    loading="lazy"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          ) : null}
                           <div className="mt-1 whitespace-pre-wrap text-sm text-neutral-900">
                             {p.content ?? ''}
                           </div>
