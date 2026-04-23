@@ -482,7 +482,7 @@ export default function HomeScreen() {
                 <Pressable
                   onPress={() => openMatchModal(String(item.user_id ?? ''))}
                   hitSlop={10}
-                  style={styles.dumbbellBtn}
+                  style={styles.matchTicketBtn}
                   accessibilityRole="button"
                   accessibilityLabel="매칭권 사용"
                 >
@@ -496,7 +496,7 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="하트"
                 >
-                  <Feather name="heart" size={20} color={likedIds[id] ? '#FF3B30' : '#BDBDBD'} />
+                  <Feather name="heart" size={24} color={likedIds[id] ? '#FF3B30' : '#BDBDBD'} />
                 </Pressable>
               </View>
 
@@ -866,13 +866,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: '#E5E7EB',
   },
-  dumbbellBtn: {
+  matchTicketBtn: {
     position: 'absolute',
     right: 12,
-    bottom: 12,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    top: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: MAIN,
     alignItems: 'center',
     justifyContent: 'center',
@@ -881,10 +881,10 @@ const styles = StyleSheet.create({
   heartBtn: {
     position: 'absolute',
     top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    left: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
