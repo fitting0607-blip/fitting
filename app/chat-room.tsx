@@ -2,8 +2,10 @@ import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -14,6 +16,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
+import { insertMyNotification } from '@/notification-insert';
 import { supabase } from '../supabase';
 
 type MessageRow = {
@@ -26,6 +29,7 @@ type MessageRow = {
 };
 
 const MAIN = '#6C47FF';
+const PROFILE_VIEW_MAIN = '#3B3BF9';
 
 export default function ChatRoomScreen() {
   const router = useRouter();
@@ -35,6 +39,10 @@ export default function ChatRoomScreen() {
   const nickname = useMemo(() => String(params.nickname ?? '채팅'), [params.nickname]);
 
   const [myId, setMyId] = useState<string>('');
+  const [otherUserId, setOtherUserId] = useState<string>('');
+  const [openingProfile, setOpeningProfile] = useState(false);
+  const [profileConfirmVisible, setProfileConfirmVisible] = useState(false);
+  const [pendingProfileUserId, setPendingProfileUserId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState('');
@@ -170,9 +178,112 @@ export default function ChatRoomScreen() {
     void loadMyId();
   }, [loadMyId]);
 
+  const loadOtherUserId = useCallback(async () => {
+    if (!roomId || !myId) return;
+    try {
+      const { data: roomRow, error: roomError } = await supabase
+        .from('chat_rooms')
+        .select('match_id')
+        .eq('id', roomId)
+        .maybeSingle();
+      if (roomError) throw roomError;
+      const matchId = String((roomRow as any)?.match_id ?? '').trim();
+      if (!matchId) return;
+
+      const { data: matchRow, error: matchError } = await supabase
+        .from('matches')
+        .select('requester_id,target_id')
+        .eq('id', matchId)
+        .maybeSingle();
+      if (matchError) throw matchError;
+
+      const requesterId = String((matchRow as any)?.requester_id ?? '').trim();
+      const targetId = String((matchRow as any)?.target_id ?? '').trim();
+      const other = requesterId && requesterId !== myId ? requesterId : targetId && targetId !== myId ? targetId : '';
+      setOtherUserId(other);
+    } catch {
+      setOtherUserId('');
+    }
+  }, [myId, roomId]);
+
+  const openUserProfileWithPoints = useCallback(
+    (targetUserId: string) => {
+      if (!targetUserId) return;
+      setPendingProfileUserId(targetUserId);
+      setProfileConfirmVisible(true);
+    },
+    []
+  );
+
+  const closeProfileConfirmModal = useCallback(() => {
+    if (openingProfile) return;
+    setProfileConfirmVisible(false);
+    setPendingProfileUserId('');
+  }, [openingProfile]);
+
+  const confirmOpenProfileWithPoints = useCallback(async () => {
+    const targetUserId = pendingProfileUserId;
+    if (!targetUserId) return;
+    if (openingProfile) return;
+    setProfileConfirmVisible(false);
+    setOpeningProfile(true);
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user?.id) throw new Error('로그인이 필요합니다.');
+
+      const { data: me, error: meError } = await supabase
+        .from('users')
+        .select('points')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (meError) throw meError;
+
+      const currentPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
+      if (currentPoints < 10) {
+        Alert.alert('포인트 부족', '포인트가 부족해서 프로필을 열람할 수 없어요.');
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ points: currentPoints - 10 })
+        .eq('id', user.id);
+      if (updateError) throw updateError;
+
+      const { error: logError } = await supabase.from('point_logs').insert({
+        user_id: user.id,
+        amount: -10,
+        reason: 'profile_view',
+      });
+      if (logError) throw logError;
+
+      await insertMyNotification({
+        userId: user.id,
+        type: 'point',
+        content: '프로필 열람 -10p 차감됐어요',
+        related_id: targetUserId,
+      });
+
+      router.push({ pathname: '/user-profile', params: { userId: targetUserId } });
+    } catch (e: any) {
+      Alert.alert('처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+    } finally {
+      setOpeningProfile(false);
+      setPendingProfileUserId('');
+    }
+  }, [openingProfile, pendingProfileUserId, router]);
+
   useEffect(() => {
     void loadMessages();
   }, [loadMessages]);
+
+  useEffect(() => {
+    void loadOtherUserId();
+  }, [loadOtherUserId]);
 
   useEffect(() => {
     return () => {
@@ -239,8 +350,55 @@ export default function ChatRoomScreen() {
             {nickname}
           </Text>
 
-          <View style={styles.topRightSpace} />
+          {otherUserId ? (
+            <Pressable
+              onPress={() => openUserProfileWithPoints(otherUserId)}
+              hitSlop={10}
+              style={styles.profileBtn}
+              accessibilityRole="button"
+              accessibilityLabel="프로필 보기"
+            >
+              <Text style={styles.profileBtnText}>프로필 보기</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.topRightSpace} />
+          )}
         </View>
+
+        <Modal
+          visible={profileConfirmVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeProfileConfirmModal}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={closeProfileConfirmModal}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>프로필을 열람하시겠어요?</Text>
+              <Text style={styles.modalDesc}>10포인트가 차감됩니다.</Text>
+              <Text style={styles.modalDescHint}>프로필 열람은 10p 차감</Text>
+
+              <Pressable
+                style={styles.modalPrimaryBtn}
+                onPress={() => void confirmOpenProfileWithPoints()}
+                disabled={openingProfile}
+                accessibilityRole="button"
+                accessibilityLabel="사용할게요"
+              >
+                <Text style={styles.modalPrimaryBtnText}>사용할게요</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.modalTextBtn}
+                onPress={closeProfileConfirmModal}
+                disabled={openingProfile}
+                accessibilityRole="button"
+                accessibilityLabel="안할게요"
+              >
+                <Text style={styles.modalTextBtnText}>안할게요</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {loading && messages.length === 0 ? (
           <View style={styles.emptyWrap}>
@@ -329,6 +487,80 @@ const styles = StyleSheet.create({
   topRightSpace: {
     width: 44,
     height: 44,
+  },
+  profileBtn: {
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: MAIN,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44,
+  },
+  profileBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: '100%',
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111111',
+  },
+  modalDesc: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+    lineHeight: 18,
+  },
+  modalDescHint: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    lineHeight: 15,
+  },
+  modalPrimaryBtn: {
+    marginTop: 16,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: PROFILE_VIEW_MAIN,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  modalPrimaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  modalTextBtn: {
+    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  modalTextBtnText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   body: {
