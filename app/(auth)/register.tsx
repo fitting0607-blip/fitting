@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '../../supabase';
@@ -10,6 +10,7 @@ import { PrimaryButton } from './steps/components';
 import { GenderStep } from './steps/gender-step';
 import { MbtiStep } from './steps/mbti-step';
 import { NicknameStep } from './steps/nickname-step';
+import { PhoneStep } from './steps/phone-step';
 import { ProfileImageStep } from './steps/profile-image-step';
 import { SportsStep } from './steps/sports-step';
 import { WorkoutFrequencyStep } from './steps/workout-frequency-step';
@@ -25,8 +26,8 @@ function isValidEmail(email: string): boolean {
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const totalSteps = 9;
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9>(1);
+  const totalSteps = 10;
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10>(1);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<RegisterDraft>({
     email: '',
@@ -43,6 +44,7 @@ export default function RegisterScreen() {
     workout_goals: [],
     nickname: '',
     gender: null,
+    phone: '',
     profile_image_url: null,
     profile_image_base64: null,
     age: null,
@@ -56,7 +58,7 @@ export default function RegisterScreen() {
   };
 
   const goNext = () => {
-    if (step === 9) return;
+    if (step === 10) return;
     setStep((prev) => ((prev + 1) as typeof step));
   };
 
@@ -128,21 +130,22 @@ export default function RegisterScreen() {
   };
 
   return (
-    <SafeAreaView style={layoutStyles.safeArea} edges={['top']}>
-      <Stack.Screen options={{ headerShown: false }} />
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <SafeAreaView style={layoutStyles.safeArea} edges={['top']}>
+        <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={layoutStyles.screen}>
-        <View style={layoutStyles.headerRow}>
-          <Pressable
-            onPress={goBack}
-            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-            style={layoutStyles.backButton}
-          >
-          <Ionicons name="chevron-back" size={24} color="#111827" />
-          </Pressable>
-          <Text style={layoutStyles.progressText}>{progressLabel}</Text>
-          <View style={{ width: 44 }} />
-        </View>
+        <View style={layoutStyles.screen}>
+          <View style={layoutStyles.headerRow}>
+            <Pressable
+              onPress={goBack}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              style={layoutStyles.backButton}
+            >
+            <Ionicons name="chevron-back" size={24} color="#111827" />
+            </Pressable>
+            <Text style={layoutStyles.progressText}>{progressLabel}</Text>
+            <View style={{ width: 44 }} />
+          </View>
 
         {step === 1 ? (
           <View style={layoutStyles.body}>
@@ -219,9 +222,12 @@ export default function RegisterScreen() {
         {step === 6 ? <NicknameStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
         {step === 7 ? <GenderStep draft={draft} setDraft={setDraft} onNext={goNext} /> : null}
         {step === 8 ? (
-          <ProfileImageStep draft={draft} setDraft={setDraft} onNext={goNext} onLoadingChange={setLoading} />
+          <PhoneStep draft={draft} setDraft={setDraft} onNext={goNext} />
         ) : null}
         {step === 9 ? (
+          <ProfileImageStep draft={draft} setDraft={setDraft} onNext={goNext} onLoadingChange={setLoading} />
+        ) : null}
+        {step === 10 ? (
           <AgeStep
             draft={draft}
             setDraft={setDraft}
@@ -233,8 +239,9 @@ export default function RegisterScreen() {
             }}
           />
         ) : null}
-      </View>
-    </SafeAreaView>
+        </View>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 }
 

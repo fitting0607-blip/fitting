@@ -2,7 +2,7 @@ import { grantAttendanceIfNeededOnLogin } from '@/attendance-helpers';
 import { enqueueLoginAttendanceModal } from '@/login-attendance-pending';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 
 import { supabase } from '../../supabase';
 
@@ -46,49 +46,51 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>fitting</Text>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.container}>
+        <Text style={styles.title}>fitting</Text>
 
-      <Text style={styles.label}>이메일</Text>
-      <TextInput
-        value={email}
-        onChangeText={setEmail}
-        placeholder="you@example.com"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        textContentType="emailAddress"
-        style={styles.input}
-      />
+        <Text style={styles.label}>이메일</Text>
+        <TextInput
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          textContentType="emailAddress"
+          style={styles.input}
+        />
 
-      <Text style={styles.label}>비밀번호</Text>
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        placeholder="비밀번호"
-        secureTextEntry
-        textContentType="password"
-        style={styles.input}
-      />
+        <Text style={styles.label}>비밀번호</Text>
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          placeholder="비밀번호"
+          secureTextEntry
+          textContentType="password"
+          style={styles.input}
+        />
 
-      <Pressable
-        onPress={onLogin}
-        disabled={loading}
-        style={({ pressed }) => [
-          styles.primaryButton,
-          pressed && !loading ? styles.primaryButtonPressed : null,
-          loading ? styles.primaryButtonDisabled : null,
-        ]}
-      >
-        <Text style={styles.primaryButtonText}>{loading ? '로그인 중...' : '로그인'}</Text>
-      </Pressable>
+        <Pressable
+          onPress={onLogin}
+          disabled={loading}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            pressed && !loading ? styles.primaryButtonPressed : null,
+            loading ? styles.primaryButtonDisabled : null,
+          ]}
+        >
+          <Text style={styles.primaryButtonText}>{loading ? '로그인 중...' : '로그인'}</Text>
+        </Pressable>
 
-      <View style={styles.footerRow}>
-        <Text style={styles.footerText}>계정이 없으신가요?</Text>
-        <Link href="/register" style={styles.linkText}>
-          회원가입
-        </Link>
+        <View style={styles.footerRow}>
+          <Text style={styles.footerText}>계정이 없으신가요?</Text>
+          <Link href="/register" style={styles.linkText}>
+            회원가입
+          </Link>
+        </View>
       </View>
-    </View>
+    </TouchableWithoutFeedback>
   );
 }
 

@@ -122,6 +122,7 @@ export function AgeStep({
         .update({
           nickname: draft.nickname,
           gender: draft.gender,
+          phone: draft.phone,
           age: ageNum,
           mbti: draft.mbti,
           sports: draft.sports,
