@@ -78,14 +78,28 @@ export default function PostCreateScreen() {
 
       const byteArray = decodeBase64ToBytes(base64);
 
-      const { error: uploadError } = await supabase.storage.from(PUBLIC_UPLOAD_BUCKET).upload(storagePath, byteArray, {
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(PUBLIC_UPLOAD_BUCKET)
+        .upload(storagePath, byteArray, {
         contentType: 'image/jpeg',
         upsert: true,
+      });
+      console.log('[PostCreate] upload result', {
+        bucket: PUBLIC_UPLOAD_BUCKET,
+        storagePath,
+        ok: !uploadError,
+        data: uploadData ?? null,
+        error: uploadError ? { message: uploadError.message, name: (uploadError as any).name } : null,
       });
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from(PUBLIC_UPLOAD_BUCKET).getPublicUrl(storagePath);
       const imageUrls = [data.publicUrl];
+      console.log('[PostCreate] getPublicUrl', {
+        bucket: PUBLIC_UPLOAD_BUCKET,
+        storagePath,
+        publicUrl: data.publicUrl,
+      });
 
       const { error: insertError } = await supabase.from('posts').insert({
         user_id: user.id,
@@ -93,6 +107,7 @@ export default function PostCreateScreen() {
         post_type: feedType,
         image_urls: imageUrls,
       });
+      console.log('[PostCreate] insert posts', { ok: !insertError, image_urls: imageUrls, error: insertError?.message ?? null });
       if (insertError) throw insertError;
 
       router.replace('/(tabs)');

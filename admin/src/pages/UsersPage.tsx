@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { resolvePostImageUrls } from '../lib/resolvePostImageUrls'
 
 type UserRow = {
   id: string
@@ -22,6 +23,7 @@ type PostRow = {
   content: string | null
   post_type: '일반' | '바디' | (string & {})
   image_urls: string[] | null
+  display_image_urls?: string[]
   created_at: string
 }
 
@@ -174,7 +176,18 @@ export function UsersPage() {
         return
       }
 
-      setPosts((data ?? []) as PostRow[])
+      const postRows = (data ?? []) as PostRow[]
+      const withDisplay = await Promise.all(
+        postRows.map(async (p) => {
+          const resolved = await resolvePostImageUrls(p.image_urls)
+          const original = (p.image_urls ?? []).filter(Boolean) as string[]
+          return {
+            ...p,
+            display_image_urls: resolved.length > 0 ? resolved : original,
+          }
+        }),
+      )
+      setPosts(withDisplay)
       setPostsLoading(false)
     }
     void run()
@@ -427,9 +440,9 @@ export function UsersPage() {
                           <div className="text-xs text-neutral-500">
                             {formatDate(p.created_at)}
                           </div>
-                          {p.image_urls && p.image_urls.length > 0 ? (
+                          {p.display_image_urls && p.display_image_urls.length > 0 ? (
                             <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                              {p.image_urls.map((url, idx) => (
+                              {p.display_image_urls.map((url, idx) => (
                                 <a
                                   key={`${p.id}-${idx}`}
                                   href={url}

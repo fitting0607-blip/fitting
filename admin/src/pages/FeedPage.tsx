@@ -24,12 +24,9 @@ export function FeedPage() {
   const [rows, setRows] = useState<PostRow[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null)
-  const [nicknameByUserId, setNicknameByUserId] = useState<
-    Record<string, string | null>
-  >({})
-  const [reportCountByPostId, setReportCountByPostId] = useState<
-    Record<string, number>
-  >({})
+
+  const [nicknameByUserId, setNicknameByUserId] = useState<Record<string, string | null>>({})
+  const [reportCountByPostId, setReportCountByPostId] = useState<Record<string, number>>({})
 
   const fetchPosts = useCallback(async () => {
     setLoading(true)
@@ -55,9 +52,7 @@ export function FeedPage() {
     setRows(postRows)
     setLastUpdatedAt(new Date().toLocaleString())
 
-    const userIds = Array.from(new Set(postRows.map((r) => r.user_id))).filter(
-      Boolean,
-    )
+    const userIds = Array.from(new Set(postRows.map((r) => r.user_id))).filter(Boolean)
     if (userIds.length > 0) {
       const { data: usersData, error: usersError } = await supabase
         .from('users')
@@ -67,9 +62,9 @@ export function FeedPage() {
       if (usersError) {
         alert(usersError.message)
         setNicknameByUserId({})
-      } else if (usersData) {
+      } else {
         const map: Record<string, string | null> = {}
-        for (const u of usersData as any[]) {
+        for (const u of (usersData ?? []) as any[]) {
           map[String(u.id)] = (u.nickname ?? null) as string | null
         }
         setNicknameByUserId(map)
@@ -129,11 +124,7 @@ export function FeedPage() {
     const ok = confirm('해당 게시물을 삭제 처리(is_deleted=true) 하시겠습니까?')
     if (!ok) return
 
-    const { error } = await supabase
-      .from('posts')
-      .update({ is_deleted: true })
-      .eq('id', postId)
-
+    const { error } = await supabase.from('posts').update({ is_deleted: true }).eq('id', postId)
     if (error) {
       alert(error.message)
       return
@@ -147,7 +138,6 @@ export function FeedPage() {
   }
 
   const totalCount = rows.length
-
   const headerHint = useMemo(
     () => (tab === '일반' ? "post_type='일반'" : "post_type='바디'"),
     [tab],
@@ -158,15 +148,11 @@ export function FeedPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-base font-semibold text-neutral-900">피드 관리</div>
-          <div className="mt-1 text-sm text-neutral-500">
-            30초마다 자동으로 새로고침됩니다.
-          </div>
+          <div className="mt-1 text-sm text-neutral-500">30초마다 자동으로 새로고침됩니다.</div>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="text-xs text-neutral-500">
-            마지막 업데이트: {lastUpdatedAt ?? '-'}
-          </div>
+          <div className="text-xs text-neutral-500">마지막 업데이트: {lastUpdatedAt ?? '-'}</div>
           <button
             className="rounded-md bg-[#6C47FF] px-4 py-2 text-sm font-medium text-white hover:bg-[#5B3CF0] disabled:opacity-60"
             onClick={() => void fetchPosts()}
@@ -217,22 +203,12 @@ export function FeedPage() {
           <table className="min-w-full text-left text-sm">
             <thead className="bg-neutral-50 text-xs text-neutral-500">
               <tr>
-                <th className="whitespace-nowrap px-4 py-3 font-medium">
-                  작성자
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 font-medium">
-                  이미지
-                </th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">작성자</th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">이미지</th>
                 <th className="min-w-[360px] px-4 py-3 font-medium">내용</th>
-                <th className="whitespace-nowrap px-4 py-3 font-medium">
-                  작성일
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 font-medium">
-                  신고
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 font-medium">
-                  삭제
-                </th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">작성일</th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">신고</th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">삭제</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -253,11 +229,10 @@ export function FeedPage() {
                   const nickname = nicknameByUserId[p.user_id] ?? '-'
                   const thumb = p.image_urls?.[0] ?? null
                   const reportCount = reportCountByPostId[p.id] ?? 0
+
                   return (
                     <tr key={p.id} className="hover:bg-neutral-50">
-                      <td className="whitespace-nowrap px-4 py-3 text-neutral-900">
-                        {nickname}
-                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-neutral-900">{nickname}</td>
                       <td className="whitespace-nowrap px-4 py-3">
                         {thumb ? (
                           <a
@@ -270,7 +245,7 @@ export function FeedPage() {
                               src={thumb}
                               alt=""
                               className="h-full w-full object-cover"
-                              loading="lazy"
+                              loading="eager"
                             />
                           </a>
                         ) : (

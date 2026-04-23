@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { resolvePostImageUrls } from '../lib/resolvePostImageUrls'
 
 type ReportRow = {
   id: string
@@ -13,7 +14,7 @@ type ReportRow = {
 }
 
 type UserLite = { id: string; nickname: string | null; email?: string | null }
-type PostLite = { id: string; image_urls: string[] | null }
+type PostLite = { id: string; image_urls: string[] | null; display_image_urls?: string[] }
 
 function includesLoose(haystack: string | null | undefined, needle: string) {
   if (!needle) return true
@@ -189,9 +190,13 @@ export function ReportsPage() {
         if (alive && postsData) {
           const map: Record<string, PostLite> = {}
           for (const p of postsData as any[]) {
+            const resolved = await resolvePostImageUrls(p.image_urls ?? null)
+            const original = (Array.isArray(p.image_urls) ? p.image_urls : [])
+              .filter(Boolean) as string[]
             map[String(p.id)] = {
               id: String(p.id),
               image_urls: (p.image_urls ?? null) as string[] | null,
+              display_image_urls: resolved.length > 0 ? resolved : original,
             }
           }
           setPostsById(map)
@@ -436,7 +441,7 @@ export function ReportsPage() {
                 </div>
                 <ImageGrid
                   title="게시물 이미지"
-                  urls={selectedPost?.image_urls ?? null}
+                  urls={selectedPost?.display_image_urls ?? selectedPost?.image_urls ?? null}
                 />
               </div>
             ) : null}
