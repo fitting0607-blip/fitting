@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 type UserRow = {
   id: string
   email: string | null
+  provider: string | null
   nickname: string | null
   phone: string | null
   gender: string | null
@@ -115,7 +116,7 @@ export function UsersPage() {
       const { data, error } = await supabase
         .from('users')
         .select(
-          'id,email,nickname,phone,gender,age,sports,points,matching_tickets,created_at,is_admin',
+          'id,email,provider,nickname,phone,gender,age,sports,points,matching_tickets,created_at,is_admin',
         )
         .order('created_at', { ascending: false })
 
@@ -233,6 +234,7 @@ export function UsersPage() {
             <thead className="bg-neutral-50 text-xs text-neutral-500">
               <tr>
                 <th className="whitespace-nowrap px-5 py-3 font-medium">가입일</th>
+                <th className="whitespace-nowrap px-5 py-3 font-medium">가입방식</th>
                 <th className="whitespace-nowrap px-5 py-3 font-medium">닉네임</th>
                 <th className="whitespace-nowrap px-5 py-3 font-medium">이메일</th>
                 <th className="whitespace-nowrap px-5 py-3 font-medium">전화번호</th>
@@ -243,13 +245,13 @@ export function UsersPage() {
             <tbody className="divide-y divide-neutral-100">
               {loading ? (
                 <tr>
-                  <td className="px-5 py-6 text-neutral-500" colSpan={6}>
+                  <td className="px-5 py-6 text-neutral-500" colSpan={7}>
                     로딩 중...
                   </td>
                 </tr>
               ) : visibleRows.length === 0 ? (
                 <tr>
-                  <td className="px-5 py-6 text-neutral-500" colSpan={6}>
+                  <td className="px-5 py-6 text-neutral-500" colSpan={7}>
                     유저가 없습니다.
                   </td>
                 </tr>
@@ -258,6 +260,9 @@ export function UsersPage() {
                   <tr key={u.id} className="hover:bg-neutral-50">
                     <td className="whitespace-nowrap px-5 py-4 text-neutral-900">
                       {formatDate(u.created_at)}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-neutral-700">
+                      {u.provider ?? '-'}
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-neutral-900">
                       {u.nickname ?? '-'}
