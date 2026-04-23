@@ -2,6 +2,7 @@ import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import Feather from '@expo/vector-icons/Feather';
 import * as Location from 'expo-location';
 import { Image } from 'expo-image';
+import Constants from 'expo-constants';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -28,7 +29,25 @@ import { supabase } from '@/supabase';
 const MAIN = '#3B3BF9';
 const BTN_SOFT_BG = '#E8EAFF';
 
-const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+function getGooglePlacesApiKey(): string | undefined {
+  // Prefer explicit public env var (works across environments)
+  const envPlaces = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY?.trim();
+  if (envPlaces) return envPlaces;
+
+  // Backward-compatible: some projects store this as "MAPS" key
+  const envMaps = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
+  if (envMaps) return envMaps;
+
+  // Fallback to app.json keys (useful in native builds)
+  const cfg = Constants.expoConfig as any;
+  const iosKey = typeof cfg?.ios?.googleMapsApiKey === 'string' ? cfg.ios.googleMapsApiKey.trim() : '';
+  if (iosKey) return iosKey;
+  const androidKey =
+    typeof cfg?.android?.googleMaps?.apiKey === 'string' ? cfg.android.googleMaps.apiKey.trim() : '';
+  if (androidKey) return androidKey;
+
+  return undefined;
+}
 
 const SEOUL_REGION: Region = {
   latitude: 37.5665,
@@ -242,6 +261,14 @@ export default function MapScreen() {
       return;
     }
 
+    const apiKey = getGooglePlacesApiKey();
+    if (!apiKey) {
+      console.warn('[places][autocomplete] missing API key. Set EXPO_PUBLIC_GOOGLE_PLACES_API_KEY (or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY).');
+      setPredictions([]);
+      setPredLoading(false);
+      return;
+    }
+
     setPredLoading(true);
     const controller = new AbortController();
     const t = setTimeout(async () => {
@@ -249,7 +276,7 @@ export default function MapScreen() {
         const url =
           `https://maps.googleapis.com/maps/api/place/autocomplete/json` +
           `?input=${encodeURIComponent(q)}` +
-          `&key=${encodeURIComponent(GOOGLE_PLACES_API_KEY ?? '')}` +
+          `&key=${encodeURIComponent(apiKey)}` +
           `&language=ko` +
           `&components=country:kr` +
           `&types=geocode`;
@@ -260,6 +287,13 @@ export default function MapScreen() {
         const json = (await res.json()) as any;
         console.log('[places][autocomplete] data:', json);
         const list = Array.isArray(json?.predictions) ? (json.predictions as PlacePrediction[]) : [];
+        console.log(
+          '[places][autocomplete] query:',
+          q,
+          'predictions:',
+          list.length,
+          list.slice(0, 10).map((x) => x.description)
+        );
         setPredictions(list);
       } catch (e: any) {
         if (e?.name === 'AbortError') return;
@@ -279,11 +313,15 @@ export default function MapScreen() {
     async (p: PlacePrediction) => {
       setPredLoading(true);
       try {
+        const apiKey = getGooglePlacesApiKey();
+        if (!apiKey) {
+          throw new Error('Google API 키가 설정되지 않았어요.');
+        }
         const url =
           `https://maps.googleapis.com/maps/api/place/details/json` +
           `?place_id=${encodeURIComponent(p.place_id)}` +
           `&fields=geometry,name,formatted_address` +
-          `&key=${encodeURIComponent(GOOGLE_PLACES_API_KEY ?? '')}` +
+          `&key=${encodeURIComponent(apiKey)}` +
           `&language=ko`;
         console.log('[places][details] url:', url);
         const res = await fetch(url);
@@ -301,6 +339,7 @@ export default function MapScreen() {
           p.structured_formatting?.main_text?.trim() ||
           (typeof json?.result?.name === 'string' ? json.result.name.trim() : '') ||
           p.description;
+        console.log('[places][details] picked:', label, 'place_id:', p.place_id, 'lat/lng:', lat, lng);
         setAreaLabel(label);
         setRegionModalOpen(false);
         setRegionQuery('');
