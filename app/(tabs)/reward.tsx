@@ -3,10 +3,12 @@ import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
+  FlatList,
   Platform,
   Pressable,
   ScrollView,
@@ -14,6 +16,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image as RNImage,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -26,6 +29,15 @@ import { insertMyNotification } from '@/notification-insert';
 import { supabase } from '@/supabase';
 
 const MAIN = '#6C47FF';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const BANNER_RATIO = 240 / 670;
+const BANNER_WRAP_PADDING_BOTTOM = 14;
+
+type Banner = {
+  id: string;
+  image_url: string;
+  click_url: string | null;
+};
 
 export default function RewardScreen() {
   const router = useRouter();
@@ -42,6 +54,141 @@ export default function RewardScreen() {
   const [adBusy, setAdBusy] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [exchangeBusy, setExchangeBusy] = useState(false);
+
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const bannerListRef = React.useRef<FlatList<Banner> | null>(null);
+  const bannerTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const bannerHeight = useMemo(() => {
+    return Math.round(SCREEN_WIDTH * BANNER_RATIO);
+  }, []);
+
+  const loadBanners = useCallback(async (): Promise<Banner[]> => {
+    const { data, error } = await supabase
+      .from('banners')
+      .select('id,image_url,click_url,is_active,created_at')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const list = (Array.isArray(data) ? data : [])
+      .map((r: any) => ({
+        id: String(r?.id ?? '').trim(),
+        image_url: String(r?.image_url ?? '').trim(),
+        click_url: r?.click_url ? String(r.click_url).trim() : null,
+      }))
+      .filter((r) => r.id.length > 0 && r.image_url.length > 0);
+
+    return list;
+  }, []);
+
+  const clearBannerTimer = useCallback(() => {
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+      bannerTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleNextBanner = useCallback(() => {
+    clearBannerTimer();
+    if (banners.length <= 1) return;
+    bannerTimerRef.current = setTimeout(() => {
+      const next = (currentBannerIndex + 1) % banners.length;
+      try {
+        bannerListRef.current?.scrollToOffset({
+          offset: SCREEN_WIDTH * next,
+          animated: true,
+        });
+      } catch {
+        // ignore
+      }
+      scheduleNextBanner();
+    }, 3000);
+  }, [banners.length, clearBannerTimer, currentBannerIndex]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await loadBanners();
+        if (!mounted) return;
+        setBanners(list);
+        setCurrentBannerIndex(0);
+      } catch {
+        if (!mounted) return;
+        setBanners([]);
+        setCurrentBannerIndex(0);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [loadBanners]);
+
+  useEffect(() => {
+    scheduleNextBanner();
+    return () => clearBannerTimer();
+  }, [banners.length, scheduleNextBanner, clearBannerTimer]);
+
+  const onBannerMomentumEnd = useCallback(
+    (e: any) => {
+      const x = e?.nativeEvent?.contentOffset?.x ?? 0;
+      const idx = Math.round(x / SCREEN_WIDTH);
+      setCurrentBannerIndex(Math.max(0, Math.min(idx, Math.max(0, banners.length - 1))));
+      scheduleNextBanner();
+    },
+    [banners.length, scheduleNextBanner]
+  );
+
+  const onBannerScrollBeginDrag = useCallback(() => {
+    scheduleNextBanner();
+  }, [scheduleNextBanner]);
+
+  const renderBanner = useCallback(
+    ({ item }: { item: Banner }) => {
+      return (
+        <Pressable
+          onPress={() => {
+            const url = item.click_url?.trim();
+            if (!url) return;
+            void (async () => {
+              try {
+                await Linking.openURL(url);
+              } catch (e: any) {
+                Alert.alert('이동 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+              }
+            })();
+          }}
+          style={[styles.bannerCard, { width: SCREEN_WIDTH, height: bannerHeight }]}
+          accessibilityRole={item.click_url ? 'button' : 'image'}
+          accessibilityLabel="리워드 배너"
+        >
+          <RNImage
+            source={{ uri: item.image_url }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+          <View style={styles.bannerImageOverlay} />
+
+          {banners.length > 1 ? (
+            <View style={styles.bannerDots} pointerEvents="none">
+              {banners.map((_, i) => (
+                <View
+                  key={`dot_${i}`}
+                  style={[
+                    styles.bannerDot,
+                    i === currentBannerIndex ? styles.bannerDotActive : styles.bannerDotInactive,
+                  ]}
+                />
+              ))}
+            </View>
+          ) : null}
+        </Pressable>
+      );
+    },
+    [bannerHeight, banners, currentBannerIndex]
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -378,6 +525,34 @@ export default function RewardScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {banners.length > 0 ? (
+            <View style={[styles.bannerWrap, { height: bannerHeight + BANNER_WRAP_PADDING_BOTTOM }]}>
+              <FlatList
+                ref={(ref) => {
+                  bannerListRef.current = ref;
+                }}
+                data={banners}
+                keyExtractor={(item) => item.id}
+                renderItem={renderBanner}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                bounces={false}
+                onMomentumScrollEnd={onBannerMomentumEnd}
+                onScrollBeginDrag={onBannerScrollBeginDrag}
+                snapToInterval={SCREEN_WIDTH}
+                snapToAlignment="start"
+                disableIntervalMomentum
+                getItemLayout={(_, index) => ({
+                  length: SCREEN_WIDTH,
+                  offset: SCREEN_WIDTH * index,
+                  index,
+                })}
+              />
+            </View>
+          ) : null}
+
           <View style={styles.topCard}>
             <View style={styles.topCardCol}>
               <Text style={styles.topCardLabel}>보유 매칭권</Text>
@@ -552,6 +727,42 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
+  },
+  bannerWrap: {
+    width: SCREEN_WIDTH,
+    paddingBottom: BANNER_WRAP_PADDING_BOTTOM,
+    marginHorizontal: -16,
+    marginBottom: 16,
+  },
+  bannerCard: {
+    borderRadius: 18,
+    backgroundColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  bannerImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  bannerDots: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  bannerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  bannerDotActive: {
+    backgroundColor: 'rgba(255,255,255,1)',
+  },
+  bannerDotInactive: {
+    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   topCard: {
     flexDirection: 'row',

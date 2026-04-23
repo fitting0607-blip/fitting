@@ -44,8 +44,6 @@ export default function PostCreateScreen() {
       quality: 0.9,
       base64: true,
       allowsMultipleSelection: false,
-      allowsEditing: true,
-      aspect: [4, 3],
     });
 
     if (result.canceled) return;

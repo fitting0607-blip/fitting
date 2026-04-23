@@ -5,6 +5,7 @@ import {
   FlatList,
   Modal,
   Platform,
+  PixelRatio,
   Pressable,
   StyleSheet,
   Text,
@@ -12,7 +13,6 @@ import {
   Image as RNImage,
   Alert,
   ScrollView,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -52,21 +52,13 @@ type PostFeedRow = {
   display_image_urls: string[];
 };
 
-type Banner = {
-  id: string;
-  image_url: string;
-  click_url: string | null;
-};
-
 type TagKind = 'sport' | 'frequency' | 'goal';
 type TagItem = { kind: TagKind; label: string };
 
 const MAIN = '#3B3BF9';
 const ATTENDANCE_MODAL_MAIN = '#6C47FF';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const BANNER_RATIO = 240 / 670;
 const MAX_FEED_WIDTH_WEB = 430;
-const BANNER_WRAP_PADDING_BOTTOM = 14;
 
 function getTodayRangeISO() {
   const start = new Date();
@@ -82,18 +74,12 @@ export default function HomeScreen() {
   const [selectedTab, setSelectedTab] = useState<FeedTab>('일반');
   const [posts, setPosts] = useState<PostFeedRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [feedListWidth, setFeedListWidth] = useState(0);
+  const [feedListWidth, setFeedListWidth] = useState(PixelRatio.roundToNearestPixel(SCREEN_WIDTH));
   const [headerHeight, setHeaderHeight] = useState(0);
   const [feedBarHeight, setFeedBarHeight] = useState(0);
-  const [bannerWrapHeight, setBannerWrapHeight] = useState(0);
 
   const { likedIds, loadMyLikesForPostIds, handleToggleLike, LikeModal } = usePostLike();
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
-
-  const [banners, setBanners] = useState<Banner[]>([]);
-  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  const bannerListRef = React.useRef<FlatList<Banner> | null>(null);
-  const bannerTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [composeModalVisible, setComposeModalVisible] = useState(false);
   const [composeModalTitle, setComposeModalTitle] = useState('게시물을 작성하시겠어요?');
   const [openingProfile, setOpeningProfile] = useState(false);
@@ -236,43 +222,21 @@ export default function HomeScreen() {
     [openingProfile, router]
   );
 
-  const bannerHeight = useMemo(() => {
-    return Math.round(SCREEN_WIDTH * BANNER_RATIO);
-  }, []);
-
   const cardHeight = useMemo(() => {
-    const taken = headerHeight + feedBarHeight + bannerWrapHeight + tabBarHeight;
+    const taken = headerHeight + feedBarHeight + tabBarHeight;
     const remaining = Math.floor(SCREEN_HEIGHT - taken);
     return remaining > 0 ? remaining : 0;
-  }, [bannerWrapHeight, feedBarHeight, headerHeight, tabBarHeight]);
+  }, [feedBarHeight, headerHeight, tabBarHeight]);
 
   const photoHeight = useMemo(() => {
     return cardHeight > 0 ? Math.round(cardHeight * 0.72) : 0;
   }, [cardHeight]);
 
   const cardWidth = useMemo(() => {
-    return feedListWidth > 0 ? Math.floor(feedListWidth) : 0;
+    return feedListWidth > 0
+      ? PixelRatio.roundToNearestPixel(feedListWidth)
+      : PixelRatio.roundToNearestPixel(SCREEN_WIDTH);
   }, [feedListWidth]);
-
-  const loadBanners = useCallback(async (): Promise<Banner[]> => {
-    // NOTE: 앱 홈 탭 배너는 슬라이드 형식이며, 등록된 배너 중 is_active = true인 것만 앱에 표시됩니다.
-    const { data, error } = await supabase
-      .from('banners')
-      .select('id,image_url,click_url,is_active,created_at')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-
-    const list = (Array.isArray(data) ? data : [])
-      .map((r: any) => ({
-        id: String(r?.id ?? '').trim(),
-        image_url: String(r?.image_url ?? '').trim(),
-        click_url: r?.click_url ? String(r.click_url).trim() : null,
-      }))
-      .filter((r) => r.id.length > 0 && r.image_url.length > 0);
-
-    return list;
-  }, []);
 
   const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
     const list = (urls ?? []).filter(Boolean);
@@ -467,63 +431,6 @@ export default function HomeScreen() {
     void loadFeedPosts();
   }, [loadFeedPosts]);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const list = await loadBanners();
-        if (!mounted) return;
-        setBanners(list);
-        setCurrentBannerIndex(0);
-      } catch {
-        if (!mounted) return;
-        setBanners([]);
-        setCurrentBannerIndex(0);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [loadBanners]);
-
-  useEffect(() => {
-    setBannerWrapHeight(banners.length > 0 ? bannerHeight + BANNER_WRAP_PADDING_BOTTOM : 0);
-  }, [bannerHeight, banners.length]);
-
-  const clearBannerTimer = useCallback(() => {
-    if (bannerTimerRef.current) {
-      clearTimeout(bannerTimerRef.current);
-      bannerTimerRef.current = null;
-    }
-  }, []);
-
-  const scheduleNextBanner = useCallback(
-    (reason: 'mount' | 'reset' | 'tick') => {
-      clearBannerTimer();
-      if (banners.length <= 1) return;
-      // keep a single-shot timer so we can easily "reset" on user swipe
-      bannerTimerRef.current = setTimeout(() => {
-        const next = (currentBannerIndex + 1) % banners.length;
-        try {
-          bannerListRef.current?.scrollToOffset({
-            offset: SCREEN_WIDTH * next,
-            animated: true,
-          });
-        } catch {
-          // ignore
-        }
-        // schedule again after advancing
-        scheduleNextBanner('tick');
-      }, 3000);
-    },
-    [banners.length, clearBannerTimer, currentBannerIndex]
-  );
-
-  useEffect(() => {
-    scheduleNextBanner('mount');
-    return () => clearBannerTimer();
-  }, [banners.length, scheduleNextBanner, clearBannerTimer]);
-
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
@@ -567,7 +474,7 @@ export default function HomeScreen() {
                   <RNImage
                     source={{ uri: thumb }}
                     style={{ width: '100%', height: '100%' }}
-                    resizeMode="contain"
+                    resizeMode="cover"
                   />
                 ) : null}
                 {!thumb ? <View style={styles.photoPlaceholder} /> : null}
@@ -674,62 +581,6 @@ export default function HomeScreen() {
     ]
   );
 
-  const renderBanner = useCallback(
-    ({ item }: { item: Banner }) => {
-      return (
-        <Pressable
-          onPress={() => {
-            const url = item.click_url?.trim();
-            if (!url) return;
-            void (async () => {
-              try {
-                await Linking.openURL(url);
-              } catch (e: any) {
-                Alert.alert('이동 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
-              }
-            })();
-          }}
-          style={[styles.bannerCard, { width: SCREEN_WIDTH, height: bannerHeight }]}
-          accessibilityRole={item.click_url ? 'button' : 'image'}
-          accessibilityLabel="홈 배너"
-        >
-          <RNImage
-            source={{ uri: item.image_url }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-          />
-          <View style={styles.bannerImageOverlay} />
-
-          {banners.length > 1 ? (
-            <View style={styles.bannerDots} pointerEvents="none">
-              {banners.map((_, i) => (
-                <View
-                  key={`dot_${i}`}
-                  style={[
-                    styles.bannerDot,
-                    i === currentBannerIndex ? styles.bannerDotActive : styles.bannerDotInactive,
-                  ]}
-                />
-              ))}
-            </View>
-          ) : null}
-        </Pressable>
-      );
-    },
-    [bannerHeight, banners.length, currentBannerIndex]
-  );
-
-  const onBannerMomentumEnd = useCallback((e: any) => {
-    const x = e?.nativeEvent?.contentOffset?.x ?? 0;
-    const denom = SCREEN_WIDTH;
-    const idx = Math.round(x / denom);
-    setCurrentBannerIndex(Math.max(0, Math.min(idx, Math.max(0, banners.length - 1))));
-    scheduleNextBanner('reset');
-  }, [banners.length]);
-
-  const onBannerScrollBeginDrag = useCallback(() => {
-    scheduleNextBanner('reset');
-  }, [scheduleNextBanner]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -861,36 +712,6 @@ export default function HomeScreen() {
         </Pressable>
       </Modal>
 
-      {banners.length > 0 ? (
-        <View
-          style={[styles.bannerWrap, { height: bannerHeight + BANNER_WRAP_PADDING_BOTTOM }]}
-        >
-          <FlatList
-            ref={(ref) => {
-              bannerListRef.current = ref;
-            }}
-            data={banners}
-            keyExtractor={(item) => item.id}
-            renderItem={renderBanner}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
-            bounces={false}
-            onMomentumScrollEnd={onBannerMomentumEnd}
-            onScrollBeginDrag={onBannerScrollBeginDrag}
-            snapToInterval={SCREEN_WIDTH}
-            snapToAlignment="start"
-            disableIntervalMomentum
-            getItemLayout={(_, index) => ({
-              length: SCREEN_WIDTH,
-              offset: SCREEN_WIDTH * index,
-              index,
-            })}
-          />
-        </View>
-      ) : null}
-
       {loading ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>불러오는 중…</Text>
@@ -924,7 +745,9 @@ export default function HomeScreen() {
           onLayout={(e) => {
             const w = e.nativeEvent.layout.width;
             // Only constrain width on web; on native, FlatList width should match the viewport width.
-            setFeedListWidth(Platform.OS === 'web' ? Math.min(w, MAX_FEED_WIDTH_WEB) : Math.floor(w));
+            setFeedListWidth(
+              Platform.OS === 'web' ? Math.min(w, MAX_FEED_WIDTH_WEB) : PixelRatio.roundToNearestPixel(w)
+            );
             console.log('[HomeFeed] FlatList layout', {
               w,
               h: e.nativeEvent.layout.height,
@@ -1017,44 +840,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  bannerWrap: {
-    width: SCREEN_WIDTH,
-    paddingBottom: BANNER_WRAP_PADDING_BOTTOM,
-  },
-  bannerPlaceholder: {
-    height: 1,
-  },
-  bannerCard: {
-    borderRadius: 18,
-    backgroundColor: '#E5E7EB',
-    overflow: 'hidden',
-  },
-  bannerImageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-  },
-  bannerDots: {
-    position: 'absolute',
-    bottom: 10,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  bannerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  bannerDotActive: {
-    backgroundColor: 'rgba(255,255,255,1)',
-  },
-  bannerDotInactive: {
-    backgroundColor: 'rgba(255,255,255,0.45)',
-  },
-
   cardShell: {
     borderRadius: 18,
     overflow: 'hidden',
@@ -1065,6 +850,7 @@ const styles = StyleSheet.create({
   },
   photoArea: {
     backgroundColor: '#000000',
+    aspectRatio: 4 / 5,
     position: 'relative',
     overflow: 'hidden',
   },
