@@ -1,16 +1,57 @@
 import { grantAttendanceIfNeededOnLogin } from '@/attendance-helpers';
 import { enqueueLoginAttendanceModal } from '@/login-attendance-pending';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
+import * as Crypto from 'expo-crypto';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 
 import { supabase } from '../../supabase';
+
+function bytesToHex(bytes: number[]) {
+  return bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function createNonce() {
+  const bytes = await Crypto.getRandomBytesAsync(16);
+  return bytesToHex(bytes);
+}
 
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    if (Platform.OS !== 'ios') return;
+    AppleAuthentication.isAvailableAsync()
+      .then((ok) => {
+        if (!mounted) return;
+        setAppleAvailable(Boolean(ok));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setAppleAvailable(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const showApple = useMemo(() => Platform.OS === 'ios' && appleAvailable, [appleAvailable]);
 
   const onLogin = async () => {
     if (!email.trim() || !password) {
@@ -39,6 +80,57 @@ export default function LoginScreen() {
 
       router.replace('/(tabs)');
     } catch (e) {
+      Alert.alert('오류', e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onAppleLogin = async () => {
+    if (loading) return;
+
+    setLoading(true);
+    try {
+      const rawNonce = await createNonce();
+      const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
+      });
+
+      if (!credential.identityToken) {
+        Alert.alert('로그인 실패', 'Apple 인증 토큰을 가져오지 못했어요. 다시 시도해 주세요.');
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+        nonce: rawNonce,
+      });
+
+      if (error) {
+        Alert.alert('로그인 실패', error.message);
+        return;
+      }
+
+      if (data.user?.id) {
+        const attendance = await grantAttendanceIfNeededOnLogin(data.user.id);
+        if (attendance.granted) {
+          enqueueLoginAttendanceModal(attendance.pointsAwarded);
+        }
+      }
+
+      router.replace('/(tabs)');
+    } catch (e) {
+      const anyErr = e as any;
+      if (anyErr?.code === 'ERR_CANCELED') {
+        return;
+      }
       Alert.alert('오류', e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');
     } finally {
       setLoading(false);
@@ -82,6 +174,24 @@ export default function LoginScreen() {
         >
           <Text style={styles.primaryButtonText}>{loading ? '로그인 중...' : '로그인'}</Text>
         </Pressable>
+
+        {showApple ? (
+          <>
+            <View style={styles.orRow}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>또는</Text>
+              <View style={styles.orLine} />
+            </View>
+
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={12}
+              style={styles.appleButton}
+              onPress={onAppleLogin}
+            />
+          </>
+        ) : null}
 
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>계정이 없으신가요?</Text>
@@ -138,6 +248,27 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 12,
+  },
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  orText: {
+    color: '#6B7280',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  appleButton: {
+    height: 44,
+    width: '100%',
   },
   footerRow: {
     flexDirection: 'row',

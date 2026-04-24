@@ -10,6 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.hywoo.fitting",
       "googleMapsApiKey": "AIzaSyBqxzxKz4mwHfLtMJkszpoNuJnrGne-OAo"
     },
     "android": {
@@ -31,6 +32,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {

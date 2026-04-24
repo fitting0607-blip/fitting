@@ -13,6 +13,7 @@
 - 닉네임 중복 체크 (500ms debounce 실시간 검증, 사용가능/중복 표시)
 - users 테이블 nickname unique constraint 추가
 - 로그인/로그아웃
+- 애플 로그인 (expo-apple-authentication, Supabase apple provider 연동)
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
   - Supabase 연동
