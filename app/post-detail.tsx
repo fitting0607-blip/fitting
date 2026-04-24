@@ -134,7 +134,11 @@ export default function PostDetailScreen() {
 
     setDeleting(true);
     try {
-      const { error } = await supabase.from('posts').delete().eq('id', postId).eq('user_id', myUserId);
+      const { error } = await supabase
+        .from('posts')
+        .update({ is_deleted: true })
+        .eq('id', postId)
+        .eq('user_id', myUserId);
       if (error) throw error;
       router.back();
     } catch (e: any) {
