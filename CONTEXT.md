@@ -15,6 +15,13 @@
 - 로그인/로그아웃
 - 카카오 로그인 (Supabase kakao provider 연동, 리다이렉트 URI 설정 완료)
 - 애플 로그인 (expo-apple-authentication, Supabase apple provider 연동, Expo Go에서는 조건부 비활성화)
+- 보안: 환경변수 분리 (.env 생성, .gitignore 확인)
+  - EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
+  - EXPO_PUBLIC_GOOGLE_MAPS_API_KEY, EXPO_PUBLIC_GOOGLE_PLACES_API_KEY
+  - EXPO_PUBLIC_KAKAO_REST_API_KEY, EXPO_PUBLIC_KAKAO_CLIENT_SECRET
+  - app.config.ts 추가 (extra 주입), app.json 하드코딩 제거
+  - supabase.ts, login.tsx 환경변수로 교체
+- 카카오 Client Secret 재발급 완료 (퍼블릭 레포 노출 대응)
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
   - Supabase 연동

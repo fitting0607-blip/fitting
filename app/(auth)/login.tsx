@@ -230,7 +230,12 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const redirectTo = 'https://umblarikptpbjqliixqc.supabase.co/auth/v1/callback';
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+      const redirectTo = supabaseUrl ? `${supabaseUrl.replace(/\/+$/u, '')}/auth/v1/callback` : '';
+      if (!redirectTo) {
+        Alert.alert('로그인 실패', 'Supabase 설정이 비어있어요. EXPO_PUBLIC_SUPABASE_URL을 설정해 주세요.');
+        return;
+      }
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'kakao',

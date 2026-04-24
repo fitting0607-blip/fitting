@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://umblarikptpbjqliixqc.supabase.co'
-const supabaseAnonKey = 'sb_publishable_isqIQs13RrNT7ElbhlbDNw_lYNHezGE'
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+if (!supabaseUrl || !supabaseAnonKey) {
+  // eslint-disable-next-line no-console
+  console.warn('[app] Missing Supabase env. Expected EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
+}
+
+export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '')

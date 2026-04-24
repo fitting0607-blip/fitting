@@ -10,13 +10,9 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hywoo.fitting",
-      "googleMapsApiKey": "AIzaSyBqxzxKz4mwHfLtMJkszpoNuJnrGne-OAo"
+      "bundleIdentifier": "com.hywoo.fitting"
     },
     "android": {
-      "googleMaps": {
-        "apiKey": "AIzaSyBqxzxKz4mwHfLtMJkszpoNuJnrGne-OAo"
-      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
