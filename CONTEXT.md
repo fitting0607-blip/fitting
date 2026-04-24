@@ -13,7 +13,8 @@
 - 닉네임 중복 체크 (500ms debounce 실시간 검증, 사용가능/중복 표시)
 - users 테이블 nickname unique constraint 추가
 - 로그인/로그아웃
-- 애플 로그인 (expo-apple-authentication, Supabase apple provider 연동)
+- 카카오 로그인 (Supabase kakao provider 연동, 리다이렉트 URI 설정 완료)
+- 애플 로그인 (expo-apple-authentication, Supabase apple provider 연동, Expo Go에서는 조건부 비활성화)
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
   - Supabase 연동
