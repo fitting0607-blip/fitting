@@ -122,6 +122,7 @@ export default function MyScreen() {
         .from('posts')
         .select('id,user_id,post_type,image_urls,created_at')
         .eq('user_id', user.id)
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
       if (error) throw error;
 

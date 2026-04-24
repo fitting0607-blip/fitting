@@ -112,6 +112,7 @@ export default function UserProfileScreen() {
           .from('posts')
           .select('id,user_id,post_type,image_urls,created_at')
           .eq('user_id', userId)
+          .eq('is_deleted', false)
           .order('created_at', { ascending: false });
         if (pError) throw pError;
 

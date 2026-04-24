@@ -320,6 +320,7 @@ export default function HomeScreen() {
           created_at
         `)
         .eq('post_type', selectedTab)
+        .eq('is_deleted', false)
         .limit(200);
 
       const { data, error } = await query;
