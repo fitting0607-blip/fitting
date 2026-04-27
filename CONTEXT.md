@@ -15,6 +15,10 @@
 - 로그인/로그아웃
 - 카카오 로그인 (Supabase kakao provider 연동, 리다이렉트 URI 설정 완료)
 - 애플 로그인 (expo-apple-authentication, Supabase apple provider 연동, Expo Go에서는 조건부 비활성화)
+- 소셜 로그인(애플/카카오) 신규 유저 분기 처리
+  - 로그인 후 nickname이 없거나 "사용자"인 경우 회원가입 멀티스텝으로 이동
+  - 기존 유저는 홈으로 이동 (기존 동작 유지)
+  - 변경 파일: app/(auth)/login.tsx
 - 보안: 환경변수 분리 (.env 생성, .gitignore 확인)
   - EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
   - EXPO_PUBLIC_GOOGLE_MAPS_API_KEY, EXPO_PUBLIC_GOOGLE_PLACES_API_KEY
