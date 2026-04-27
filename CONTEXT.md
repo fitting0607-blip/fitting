@@ -111,6 +111,9 @@
     - paddingHorizontal: 16 → 20으로 변경
     - 매칭권/하트 버튼 위치 조정 (right/top: 16)
     - 변경 파일: app/(tabs)/index.tsx
+  - 홈 피드 카드 여백 명시적 수정
+    - cardInnerWidth = cardWidth - 40으로 명시적 계산
+    - 변경 파일: app/(tabs)/index.tsx
 - 홈 피드 필터 및 정렬:
   - 성별 필터 (남성=여성 게시물만, 여성=남성 게시물만)
   - 이미 매칭한 유저 게시물 제외

@@ -440,6 +440,7 @@ export default function HomeScreen() {
     ({ item }: { item: PostFeedRow }) => {
       if (cardWidth === 0 || cardHeight === 0 || photoHeight === 0) return null;
       const cardInsetX = 20;
+      const cardInnerWidth = Math.max(0, cardWidth - cardInsetX * 2);
       const id = String(item.id ?? '');
       const nickname = item.user?.nickname ? String(item.user.nickname) : '알 수 없음';
       const mbti = item.user?.mbti ? String(item.user.mbti) : '';
@@ -463,7 +464,7 @@ export default function HomeScreen() {
 
       return (
         <View style={{ width: cardWidth, paddingHorizontal: cardInsetX }}>
-          <View style={[styles.cardShell, { width: '100%', height: cardHeight }]}>
+          <View style={[styles.cardShell, { width: cardInnerWidth, height: cardHeight }]}>
             <ScrollView
               style={{ height: cardHeight }}
               contentContainerStyle={styles.cardScrollContent}
