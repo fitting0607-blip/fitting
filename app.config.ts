@@ -10,6 +10,10 @@ const config: ExpoConfig = {
   ...base.expo,
   ios: {
     ...(base.expo.ios ?? {}),
+    infoPlist: {
+      ...((base.expo.ios as any)?.infoPlist ?? {}),
+      ITSAppUsesNonExemptEncryption: false,
+    },
     googleMapsApiKey:
       process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? (base.expo.ios as any)?.googleMapsApiKey,
   },
