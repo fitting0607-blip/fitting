@@ -40,10 +40,11 @@ function getGooglePlacesApiKey(): string | undefined {
 
   // Fallback to app.json keys (useful in native builds)
   const cfg = Constants.expoConfig as any;
-  const iosKey = typeof cfg?.ios?.googleMapsApiKey === 'string' ? cfg.ios.googleMapsApiKey.trim() : '';
+  const iosKey =
+    typeof cfg?.ios?.config?.googleMapsApiKey === 'string' ? cfg.ios.config.googleMapsApiKey.trim() : '';
   if (iosKey) return iosKey;
   const androidKey =
-    typeof cfg?.android?.googleMaps?.apiKey === 'string' ? cfg.android.googleMaps.apiKey.trim() : '';
+    typeof cfg?.android?.config?.googleMaps?.apiKey === 'string' ? cfg.android.config.googleMaps.apiKey.trim() : '';
   if (androidKey) return androidKey;
 
   return undefined;

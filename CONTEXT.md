@@ -150,6 +150,10 @@
 - 채팅 읽음 처리 (채팅방 진입 시 읽음, 목록 뱃지 사라짐)
 - 지도 탭 (구글맵, 내 위치, 지역 검색, 트레이너 목록 바텀시트)
   - (2026-04-23) 지도 탭 검색 기능 수정 (Google Places API 키 fallback 처리)
+- 지도 Google Maps API 키 주입 경로 수정
+  - ios.googleMapsApiKey → ios.config.googleMapsApiKey
+  - android.googleMaps.apiKey → android.config.googleMaps.apiKey
+  - 변경 파일: app.config.ts, app/(tabs)/map.tsx
 - 트레이너 상태 흐름 수정 (pending → approved+미결제 → approved+결제완료)
 - 결제 대기 중 상태에서 결제하기 버튼 → 상점으로 이동
 - 피티 등록 신청 화면 (3단계 플로우, 자격증 선택사항, 승인 대기/취소/결제 대기 상태)

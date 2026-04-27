@@ -14,16 +14,25 @@ const config: ExpoConfig = {
       ...((base.expo.ios as any)?.infoPlist ?? {}),
       ITSAppUsesNonExemptEncryption: false,
     },
-    googleMapsApiKey:
-      process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? (base.expo.ios as any)?.googleMapsApiKey,
+    config: {
+      ...((base.expo.ios as any)?.config ?? {}),
+      googleMapsApiKey:
+        process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
+        (base.expo.ios as any)?.config?.googleMapsApiKey ??
+        (base.expo.ios as any)?.googleMapsApiKey,
+    },
   },
   android: {
     ...(base.expo.android ?? {}),
-    googleMaps: {
-      ...((base.expo.android as any)?.googleMaps ?? {}),
-      apiKey:
-        process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
-        (base.expo.android as any)?.googleMaps?.apiKey,
+    config: {
+      ...((base.expo.android as any)?.config ?? {}),
+      googleMaps: {
+        ...((base.expo.android as any)?.config?.googleMaps ?? {}),
+        apiKey:
+          process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ??
+          (base.expo.android as any)?.config?.googleMaps?.apiKey ??
+          (base.expo.android as any)?.googleMaps?.apiKey,
+      },
     },
   },
   extra: {
