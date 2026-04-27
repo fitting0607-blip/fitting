@@ -439,6 +439,7 @@ export default function HomeScreen() {
   const renderCard = useCallback(
     ({ item }: { item: PostFeedRow }) => {
       if (cardWidth === 0 || cardHeight === 0 || photoHeight === 0) return null;
+      const cardInsetX = 16;
       const id = String(item.id ?? '');
       const nickname = item.user?.nickname ? String(item.user.nickname) : '알 수 없음';
       const mbti = item.user?.mbti ? String(item.user.mbti) : '';
@@ -461,8 +462,8 @@ export default function HomeScreen() {
       const tagsToShow = expanded ? tagsAll : [];
 
       return (
-        <View style={{ width: cardWidth }}>
-          <View style={[styles.cardShell, { width: cardWidth, height: cardHeight }]}>
+        <View style={{ width: cardWidth, paddingHorizontal: cardInsetX }}>
+          <View style={[styles.cardShell, { width: '100%', height: cardHeight }]}>
             <ScrollView
               style={{ height: cardHeight }}
               contentContainerStyle={styles.cardScrollContent}
@@ -470,7 +471,7 @@ export default function HomeScreen() {
               nestedScrollEnabled
               bounces={false}
             >
-              <View style={[styles.photoArea, { width: cardWidth, height: photoHeight }]}>
+              <View style={[styles.photoArea, { width: '100%', height: photoHeight }]}>
                 {thumb ? (
                   <RNImage
                     source={{ uri: thumb }}
