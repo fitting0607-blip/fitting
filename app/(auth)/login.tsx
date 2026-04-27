@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 
-import { getSupabaseEnv, supabase } from '../../supabase';
+import { supabase } from '../../supabase';
 import { AppleSignInButton, isAppleAuthAvailable, signInWithApple } from '../utils/appleAuth';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -255,12 +255,7 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const supabaseUrl = getSupabaseEnv()?.url ?? '';
-      const redirectTo = supabaseUrl ? `${supabaseUrl.replace(/\/+$/u, '')}/auth/v1/callback` : '';
-      if (!redirectTo) {
-        Alert.alert('로그인 실패', 'Supabase 설정이 비어있어요. EXPO_PUBLIC_SUPABASE_URL을 설정해 주세요.');
-        return;
-      }
+      const redirectTo = 'https://umblarikptpbjqliixqc.supabase.co/auth/v1/callback';
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'kakao',

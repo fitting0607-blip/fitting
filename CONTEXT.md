@@ -14,6 +14,9 @@
 - users 테이블 nickname unique constraint 추가
 - 로그인/로그아웃
 - 카카오 로그인 (Supabase kakao provider 연동, 리다이렉트 URI 설정 완료)
+- 카카오 로그인 redirectTo URL 수정
+  - fitting://auth/callback → https://umblarikptpbjqliixqc.supabase.co/auth/v1/callback 으로 변경
+  - 변경 파일: app/(auth)/login.tsx
 - 애플 로그인 (expo-apple-authentication, Supabase apple provider 연동, Expo Go에서는 조건부 비활성화)
 - 소셜 로그인(애플/카카오) 신규 유저 분기 처리
   - 로그인 후 nickname이 없거나 "사용자"인 경우 회원가입 멀티스텝으로 이동
