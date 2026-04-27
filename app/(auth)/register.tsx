@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +26,9 @@ function isValidEmail(email: string): boolean {
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ provider?: string }>();
+  const providerParam = typeof params.provider === 'string' ? params.provider : '';
+  const isSocialProvider = providerParam === 'apple' || providerParam === 'kakao';
   const totalSteps = 10;
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10>(1);
   const [loading, setLoading] = useState(false);
@@ -90,15 +93,23 @@ export default function RegisterScreen() {
   const showEmailError = emailTrimmed.length > 0 && !isValidEmail(emailTrimmed);
   const showPasswordError = draft.password.length > 0 && draft.password.length < 6;
 
-  const step1CanProceed =
-    isValidEmail(emailTrimmed) &&
-    draft.password.length >= 6 &&
-    draft.agreements.termsOfService &&
-    draft.agreements.privacyPolicy &&
-    draft.agreements.pointsPolicy;
+  const step1CanProceed = isSocialProvider
+    ? draft.agreements.termsOfService &&
+      draft.agreements.privacyPolicy &&
+      draft.agreements.pointsPolicy
+    : isValidEmail(emailTrimmed) &&
+      draft.password.length >= 6 &&
+      draft.agreements.termsOfService &&
+      draft.agreements.privacyPolicy &&
+      draft.agreements.pointsPolicy;
 
   const onPressStep1Next = async () => {
     if (loading || !step1CanProceed) return;
+
+    if (isSocialProvider) {
+      goNext();
+      return;
+    }
 
     const emailToUse = emailTrimmed.toLowerCase();
     setLoading(true);
@@ -149,36 +160,38 @@ export default function RegisterScreen() {
 
         {step === 1 ? (
           <View style={layoutStyles.body}>
-            <Text style={layoutStyles.title}>이메일과 비밀번호를 입력해 주세요</Text>
+            <Text style={layoutStyles.title}>
+              {isSocialProvider ? '약관에 동의해 주세요' : '이메일과 비밀번호를 입력해 주세요'}
+            </Text>
 
-          <Text style={layoutStyles.label}>이메일</Text>
-          <TextInput
-            value={draft.email}
-            onChangeText={(text) => setDraft((prev) => ({ ...prev, email: text }))}
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            textContentType="emailAddress"
-            style={[layoutStyles.input, showEmailError ? styles.inputError : null]}
-          />
-          {showEmailError ? (
-            <Text style={styles.fieldError}>올바른 이메일 형식을 입력해주세요</Text>
-          ) : null}
+            {!isSocialProvider ? (
+              <>
+                <Text style={layoutStyles.label}>이메일</Text>
+                <TextInput
+                  value={draft.email}
+                  onChangeText={(text) => setDraft((prev) => ({ ...prev, email: text }))}
+                  placeholder="you@example.com"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  style={[layoutStyles.input, showEmailError ? styles.inputError : null]}
+                />
+                {showEmailError ? <Text style={styles.fieldError}>올바른 이메일 형식을 입력해주세요</Text> : null}
 
-          <Text style={layoutStyles.label}>비밀번호</Text>
-          <TextInput
-            value={draft.password}
-            onChangeText={(text) => setDraft((prev) => ({ ...prev, password: text }))}
-            placeholder="비밀번호"
-            secureTextEntry
-            textContentType="newPassword"
-            style={[layoutStyles.input, showPasswordError ? styles.inputError : null]}
-          />
-          {showPasswordError ? (
-            <Text style={styles.fieldError}>비밀번호는 6자 이상이어야 해요</Text>
-          ) : null}
+                <Text style={layoutStyles.label}>비밀번호</Text>
+                <TextInput
+                  value={draft.password}
+                  onChangeText={(text) => setDraft((prev) => ({ ...prev, password: text }))}
+                  placeholder="비밀번호"
+                  secureTextEntry
+                  textContentType="newPassword"
+                  style={[layoutStyles.input, showPasswordError ? styles.inputError : null]}
+                />
+                {showPasswordError ? <Text style={styles.fieldError}>비밀번호는 6자 이상이어야 해요</Text> : null}
 
-          <View style={{ height: 8 }} />
+                <View style={{ height: 8 }} />
+              </>
+            ) : null}
 
           <Text style={layoutStyles.label}>약관 동의</Text>
 

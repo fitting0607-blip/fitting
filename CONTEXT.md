@@ -19,6 +19,10 @@
   - 로그인 후 nickname이 없거나 "사용자"인 경우 회원가입 멀티스텝으로 이동
   - 기존 유저는 홈으로 이동 (기존 동작 유지)
   - 변경 파일: app/(auth)/login.tsx
+- 소셜 로그인 회원가입 플로우 개선
+  - 애플/카카오 로그인 시 provider 파라미터 전달
+  - 1단계에서 이메일/비밀번호 입력 숨김, 약관 동의만 표시
+  - 소셜 유저는 약관 동의만 체크되면 다음 단계로 진행
 - 보안: 환경변수 분리 (.env 생성, .gitignore 확인)
   - EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
   - EXPO_PUBLIC_GOOGLE_MAPS_API_KEY, EXPO_PUBLIC_GOOGLE_PLACES_API_KEY

@@ -24,7 +24,11 @@ function bytesToHex(bytes: number[]) {
   return bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function routeAfterSocialLogin(router: ReturnType<typeof useRouter>, userId: string) {
+async function routeAfterSocialLogin(
+  router: ReturnType<typeof useRouter>,
+  userId: string,
+  provider: 'apple' | 'kakao',
+) {
   if (!userId) {
     router.replace('/(tabs)');
     return;
@@ -40,7 +44,7 @@ async function routeAfterSocialLogin(router: ReturnType<typeof useRouter>, userI
   const isNewUser = !nickname || nickname === '사용자';
 
   if (isNewUser) {
-    router.replace('/register');
+    router.replace(`/(auth)/register?provider=${provider}`);
   } else {
     router.replace('/(tabs)');
   }
@@ -300,7 +304,7 @@ export default function LoginScreen() {
         }
       }
 
-      await routeAfterSocialLogin(router, userId ?? '');
+      await routeAfterSocialLogin(router, userId ?? '', 'kakao');
     } catch (e) {
       Alert.alert('오류', e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');
     } finally {
@@ -341,7 +345,7 @@ export default function LoginScreen() {
         }
       }
 
-      await routeAfterSocialLogin(router, data.user?.id ?? '');
+      await routeAfterSocialLogin(router, data.user?.id ?? '', 'apple');
     } catch (e) {
       const anyErr = e as any;
       if (anyErr?.code === 'ERR_CANCELED') {
