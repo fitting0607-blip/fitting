@@ -25,6 +25,11 @@
   - eas.json 생성 (development / preview / production)
   - app.config.ts에 EAS projectId 추가 (c58d31bb-552c-41a7-832d-ba38f73387f8)
   - eas build:configure 완료 (iOS + Android)
+- iOS EAS 빌드 완료 및 TestFlight 제출 완료
+  - App Store Connect 앱 등록: fitting (fitness) / 번들 ID: com.hywoo.fitting
+  - ASC App ID: 6763969390
+  - TestFlight 그룹 생성 완료 (Team - Expo)
+  - 빌드 ID: e7b4b91f-ce59-4907-8038-d6bf56d9b73d
 - 카카오 Client Secret 재발급 완료 (퍼블릭 레포 노출 대응)
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
