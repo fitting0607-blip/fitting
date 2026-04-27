@@ -14,9 +14,8 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import * as Linking from 'expo-linking';
 
-import { supabase } from '../../supabase';
+import { getSupabaseEnv, supabase } from '../../supabase';
 import { AppleSignInButton, isAppleAuthAvailable, signInWithApple } from '../utils/appleAuth';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -230,7 +229,7 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+      const supabaseUrl = getSupabaseEnv()?.url ?? '';
       const redirectTo = supabaseUrl ? `${supabaseUrl.replace(/\/+$/u, '')}/auth/v1/callback` : '';
       if (!redirectTo) {
         Alert.alert('로그인 실패', 'Supabase 설정이 비어있어요. EXPO_PUBLIC_SUPABASE_URL을 설정해 주세요.');
