@@ -21,6 +21,10 @@
   - EXPO_PUBLIC_KAKAO_REST_API_KEY, EXPO_PUBLIC_KAKAO_CLIENT_SECRET
   - app.config.ts 추가 (extra 주입), app.json 하드코딩 제거
   - supabase.ts, login.tsx 환경변수로 교체
+- EAS 빌드 설정 완료
+  - eas.json 생성 (development / preview / production)
+  - app.config.ts에 EAS projectId 추가 (c58d31bb-552c-41a7-832d-ba38f73387f8)
+  - eas build:configure 완료 (iOS + Android)
 - 카카오 Client Secret 재발급 완료 (퍼블릭 레포 노출 대응)
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6

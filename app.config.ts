@@ -24,6 +24,9 @@ const config: ExpoConfig = {
   },
   extra: {
     ...(base.expo.extra ?? {}),
+    eas: {
+      projectId: 'c58d31bb-552c-41a7-832d-ba38f73387f8',
+    },
     EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
     EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
