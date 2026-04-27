@@ -26,12 +26,16 @@ export function AgeStep({
   draft,
   setDraft,
   supabase,
+  isSocialProvider,
+  provider,
   onDone,
   onLoadingChange,
 }: {
   draft: RegisterDraft;
   setDraft: Dispatch<SetStateAction<RegisterDraft>>;
   supabase: SupabaseClient;
+  isSocialProvider: boolean;
+  provider?: string;
   onDone: () => void;
   onLoadingChange: (v: boolean) => void;
 }) {
@@ -47,44 +51,53 @@ export function AgeStep({
     onLoadingChange(true);
 
     try {
-      // 1. 회원가입
-      console.log('[age] signUp 시작');
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: draft.email,
-        password: draft.password,
-      });
-
       let userId: string | undefined;
-
-      if (signUpError) {
-        console.log('[age] signUp 에러:', signUpError.message);
-
-        // 이메일 중복(이미 가입된 계정)
-        if (isUserAlreadyRegisteredError(signUpError.message)) {
-          Alert.alert('회원가입 실패', '이미 사용 중인 이메일이에요');
-          return;
-        } else {
-          Alert.alert('회원가입 실패', signUpError.message);
+      if (isSocialProvider) {
+        // 소셜 로그인 유저는 이미 auth.users에 계정/세션이 있으므로 추가 auth 가입/익명 로그인 시도를 하면 안 됨
+        const { data, error } = await supabase.auth.getUser();
+        if (error) {
+          Alert.alert('오류', error.message);
           return;
         }
-      } else {
-        console.log('[age] signUp 성공, user:', data.user?.id);
-
-        // 2. 세션 없으면 로그인
         userId = data.user?.id;
-        if (!data.session) {
-          console.log('[age] 세션 없음, signIn 시도');
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: draft.email,
-            password: draft.password,
-          });
-          if (signInError) {
-            console.log('[age] signIn 에러:', signInError.message);
-            Alert.alert('로그인 실패', signInError.message);
+      } else {
+        // 1. 회원가입 (이메일/비밀번호)
+        console.log('[age] signUp 시작');
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: draft.email,
+          password: draft.password,
+        });
+
+        if (signUpError) {
+          console.log('[age] signUp 에러:', signUpError.message);
+
+          // 이메일 중복(이미 가입된 계정)
+          if (isUserAlreadyRegisteredError(signUpError.message)) {
+            Alert.alert('회원가입 실패', '이미 사용 중인 이메일이에요');
+            return;
+          } else {
+            Alert.alert('회원가입 실패', signUpError.message);
             return;
           }
-          userId = signInData.user?.id;
-          console.log('[age] signIn 성공, user:', userId);
+        } else {
+          console.log('[age] signUp 성공, user:', data.user?.id);
+
+          // 2. 세션 없으면 로그인
+          userId = data.user?.id;
+          if (!data.session) {
+            console.log('[age] 세션 없음, signIn 시도');
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+              email: draft.email,
+              password: draft.password,
+            });
+            if (signInError) {
+              console.log('[age] signIn 에러:', signInError.message);
+              Alert.alert('로그인 실패', signInError.message);
+              return;
+            }
+            userId = signInData.user?.id;
+            console.log('[age] signIn 성공, user:', userId);
+          }
         }
       }
 
@@ -115,33 +128,43 @@ export function AgeStep({
         }
       }
 
-      // 4. public.users 업데이트
-      console.log('[age] users update 시작');
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          nickname: draft.nickname,
-          gender: draft.gender,
-          phone: draft.phone,
-          age: ageNum,
-          mbti: draft.mbti,
-          sports: draft.sports,
-          workout_goals: draft.workout_goals,
-          workout_frequency: draft.workout_frequency,
-          profile_image_url: profileImageUrl,
-        })
-        .eq('id', userId);
+      // 4. public.users upsert (소셜은 INSERT/UPDATE만, 이메일은 upsert로 안전하게 처리)
+      console.log('[age] users upsert 시작');
+      const { data: authUserData } = await supabase.auth.getUser();
+      const authEmail = authUserData.user?.email ?? null;
+      const normalizedProvider =
+        provider === 'apple' || provider === 'kakao' ? provider : isSocialProvider ? provider ?? null : 'email';
 
-      if (updateError) {
-        console.log('[age] update 에러:', updateError.message);
-        if (isUniqueViolationError(updateError) && updateError.code === '23505') {
+      const { error: upsertError } = await supabase
+        .from('users')
+        .upsert(
+          {
+            id: userId,
+            email: isSocialProvider ? authEmail : (draft.email?.trim().toLowerCase() ?? null),
+            provider: normalizedProvider,
+            nickname: draft.nickname,
+            gender: draft.gender,
+            phone: draft.phone,
+            age: ageNum,
+            mbti: draft.mbti,
+            sports: draft.sports,
+            workout_goals: draft.workout_goals,
+            workout_frequency: draft.workout_frequency,
+            profile_image_url: profileImageUrl,
+          },
+          { onConflict: 'id' },
+        );
+
+      if (upsertError) {
+        console.log('[age] upsert 에러:', upsertError.message);
+        if (isUniqueViolationError(upsertError) && upsertError.code === '23505') {
           Alert.alert('저장 실패', '이미 사용 중인 닉네임이에요');
           return;
         }
-        Alert.alert('저장 실패', updateError.message);
+        Alert.alert('저장 실패', upsertError.message);
         return;
       }
-      console.log('[age] update 성공');
+      console.log('[age] upsert 성공');
 
       const attendance = await grantAttendanceIfNeededOnLogin(userId);
       if (attendance.granted) {

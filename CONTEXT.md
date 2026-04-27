@@ -23,6 +23,10 @@
   - 애플/카카오 로그인 시 provider 파라미터 전달
   - 1단계에서 이메일/비밀번호 입력 숨김, 약관 동의만 표시
   - 소셜 유저는 약관 동의만 체크되면 다음 단계로 진행
+- 소셜 로그인 회원가입 플로우 버그 수정
+  - 마지막 단계에서 auth.signUp 호출 제거
+  - 소셜 유저는 public.users upsert만 처리하도록 수정
+  - 변경 파일: age-step.tsx, register.tsx
 - 보안: 환경변수 분리 (.env 생성, .gitignore 확인)
   - EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
   - EXPO_PUBLIC_GOOGLE_MAPS_API_KEY, EXPO_PUBLIC_GOOGLE_PLACES_API_KEY

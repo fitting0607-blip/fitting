@@ -245,6 +245,8 @@ export default function RegisterScreen() {
             draft={draft}
             setDraft={setDraft}
             supabase={supabase}
+            isSocialProvider={isSocialProvider}
+            provider={providerParam}
             onLoadingChange={setLoading}
             onDone={() => {
               console.log('[register] navigation:router.replace(\"/(tabs)\")');
