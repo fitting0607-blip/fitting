@@ -29,9 +29,9 @@ function Row({
 export default function SettingsScreen() {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const goBack = useCallback(() => router.back(), [router]);
-  const todo = useCallback(() => Alert.alert('준비중', '아직 구현되지 않았어요.'), []);
 
   const logout = useCallback(async () => {
     if (loggingOut) return;
@@ -46,6 +46,47 @@ export default function SettingsScreen() {
       setLoggingOut(false);
     }
   }, [loggingOut, router]);
+
+  const withdraw = useCallback(() => {
+    if (withdrawing) return;
+
+    Alert.alert('회원탈퇴', '정말 탈퇴하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '확인',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setWithdrawing(true);
+            try {
+              const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+              if (sessionErr) throw sessionErr;
+              const accessToken = sessionData.session?.access_token;
+              if (!accessToken) throw new Error('로그인이 필요합니다.');
+
+              // 1) public.users delete + 2) auth.users delete (server-side service role)
+              const { data, error } = await supabase.functions.invoke('delete-account', {
+                headers: { Authorization: `Bearer ${accessToken}` },
+              });
+              if (error) throw error;
+              if (!data?.ok) throw new Error('탈퇴 처리에 실패했습니다.');
+
+              // 3) logout + go to login
+              const { error: signOutErr } = await supabase.auth.signOut();
+              if (signOutErr) throw signOutErr;
+
+              router.replace('/(auth)/login' as any);
+              Alert.alert('완료', '탈퇴가 완료되었습니다');
+            } catch (e) {
+              Alert.alert('탈퇴 실패', e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');
+            } finally {
+              setWithdrawing(false);
+            }
+          })();
+        },
+      },
+    ]);
+  }, [router, withdrawing]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -100,7 +141,7 @@ export default function SettingsScreen() {
         <View style={styles.sectionBox}>
           <Row label={loggingOut ? '로그아웃 중…' : '로그아웃'} onPress={logout} />
           <View style={styles.divider} />
-          <Row label="계정탈퇴" onPress={todo} />
+          <Row label={withdrawing ? '탈퇴 처리 중…' : '계정탈퇴'} onPress={withdraw} />
         </View>
       </View>
     </SafeAreaView>
