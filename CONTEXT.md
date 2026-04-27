@@ -114,6 +114,10 @@
   - public.users + auth.users 순서로 삭제 처리
   - 탈퇴 완료 후 로그인 화면으로 이동
   - SERVICE_ROLE_KEY를 Edge Function Secrets에 등록
+- 회원탈퇴 Edge Function 호출 방식 수정
+  - supabase.functions.invoke → fetch 직접 호출로 변경
+  - Authorization Bearer 토큰 + apikey 헤더 전달
+  - 변경 파일: app/settings.tsx
 - 상대방 프로필 보기 (10p 차감)
 - 매칭하기 기능 (일일 3회 무료, 매칭권 차감, 단방향 DM)
 - 채팅 탭 (채팅 목록, 실시간 채팅방, 매칭 후 자동 이동, 알림 벨 아이콘)

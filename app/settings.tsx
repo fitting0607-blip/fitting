@@ -4,7 +4,7 @@ import React, { useCallback, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { supabase } from '@/supabase';
+import { getSupabaseEnv, supabase } from '@/supabase';
 
 function Row({
   label,
@@ -32,6 +32,41 @@ export default function SettingsScreen() {
   const [withdrawing, setWithdrawing] = useState(false);
 
   const goBack = useCallback(() => router.back(), [router]);
+
+  const callDeleteAccount = useCallback(async (accessToken: string) => {
+    const functionUrl =
+      'https://umblarikptpbjqliixqc.supabase.co/functions/v1/delete-account';
+
+    const supabaseEnv = getSupabaseEnv();
+    const res = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(supabaseEnv?.anonKey ? { apikey: supabaseEnv.anonKey } : null),
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const text = await res.text();
+    let parsed: any = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (!res.ok) {
+      const message =
+        typeof parsed?.error === 'string'
+          ? parsed.error
+          : text || `Edge Function 호출 실패 (HTTP ${res.status})`;
+      throw new Error(message);
+    }
+
+    if (!parsed?.ok) {
+      throw new Error('탈퇴 처리에 실패했습니다.');
+    }
+  }, []);
 
   const logout = useCallback(async () => {
     if (loggingOut) return;
@@ -65,11 +100,7 @@ export default function SettingsScreen() {
               if (!accessToken) throw new Error('로그인이 필요합니다.');
 
               // 1) public.users delete + 2) auth.users delete (server-side service role)
-              const { data, error } = await supabase.functions.invoke('delete-account', {
-                headers: { Authorization: `Bearer ${accessToken}` },
-              });
-              if (error) throw error;
-              if (!data?.ok) throw new Error('탈퇴 처리에 실패했습니다.');
+              await callDeleteAccount(accessToken);
 
               // 3) logout + go to login
               const { error: signOutErr } = await supabase.auth.signOut();
@@ -86,7 +117,7 @@ export default function SettingsScreen() {
         },
       },
     ]);
-  }, [router, withdrawing]);
+  }, [callDeleteAccount, router, withdrawing]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
