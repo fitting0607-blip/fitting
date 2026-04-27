@@ -17,6 +17,10 @@
 - 카카오 로그인 redirectTo URL 수정
   - fitting://auth/callback → https://umblarikptpbjqliixqc.supabase.co/auth/v1/callback 으로 변경
   - 변경 파일: app/(auth)/login.tsx
+- 카카오 로그인 콜백 처리 방식 수정
+  - implicit flow + PKCE(code) 방식 모두 지원하도록 수정
+  - code가 있으면 exchangeCodeForSession으로 세션 교환
+  - 변경 파일: app/(auth)/login.tsx
 - 애플 로그인 (expo-apple-authentication, Supabase apple provider 연동, Expo Go에서는 조건부 비활성화)
 - 소셜 로그인(애플/카카오) 신규 유저 분기 처리
   - 로그인 후 nickname이 없거나 "사용자"인 경우 회원가입 멀티스텝으로 이동

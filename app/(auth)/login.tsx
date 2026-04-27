@@ -191,6 +191,22 @@ function extractSupabaseSessionTokensFromUrl(url: string) {
   }
 }
 
+function extractSupabaseOAuthCodeFromUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const queryCode = u.searchParams.get('code');
+    if (queryCode) return queryCode;
+
+    // Some providers can return params in fragment as well.
+    const fragment = u.hash?.startsWith('#') ? u.hash.slice(1) : u.hash;
+    const params = new URLSearchParams(fragment);
+    const hashCode = params.get('code');
+    return hashCode || null;
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -274,21 +290,36 @@ export default function LoginScreen() {
         return;
       }
 
+      console.log('[kakao] openAuthSessionAsync url:', data.url);
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type !== 'success' || !result.url) {
         return;
       }
 
       const tokens = extractSupabaseSessionTokensFromUrl(result.url);
-      if (!tokens) {
-        Alert.alert('로그인 실패', '인증 토큰을 확인하지 못했어요. 다시 시도해 주세요.');
-        return;
-      }
+      let sessionData: any = null;
 
-      const { data: sessionData, error: sessionError } = await supabase.auth.setSession(tokens);
-      if (sessionError) {
-        Alert.alert('로그인 실패', sessionError.message);
-        return;
+      if (tokens) {
+        const { data: _sessionData, error: sessionError } = await supabase.auth.setSession(tokens);
+        if (sessionError) {
+          Alert.alert('로그인 실패', sessionError.message);
+          return;
+        }
+        sessionData = _sessionData;
+      } else {
+        const code = extractSupabaseOAuthCodeFromUrl(result.url);
+        if (!code) {
+          console.log('[kakao] callback url (no tokens/code):', result.url);
+          Alert.alert('로그인 실패', '인증 토큰을 확인하지 못했어요. 다시 시도해 주세요.');
+          return;
+        }
+
+        const { data: _sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) {
+          Alert.alert('로그인 실패', exchangeError.message);
+          return;
+        }
+        sessionData = _sessionData;
       }
 
       const userId = sessionData?.user?.id ?? sessionData?.session?.user?.id;
