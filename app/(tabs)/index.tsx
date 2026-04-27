@@ -439,7 +439,7 @@ export default function HomeScreen() {
   const renderCard = useCallback(
     ({ item }: { item: PostFeedRow }) => {
       if (cardWidth === 0 || cardHeight === 0 || photoHeight === 0) return null;
-      const cardInsetX = 16;
+      const cardInsetX = 20;
       const id = String(item.id ?? '');
       const nickname = item.user?.nickname ? String(item.user.nickname) : '알 수 없음';
       const mbti = item.user?.mbti ? String(item.user.mbti) : '';
@@ -870,8 +870,8 @@ const styles = StyleSheet.create({
   },
   matchTicketBtn: {
     position: 'absolute',
-    right: 12,
-    top: 12,
+    right: 16,
+    top: 16,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -882,8 +882,8 @@ const styles = StyleSheet.create({
   },
   heartBtn: {
     position: 'absolute',
-    top: 12,
-    left: 12,
+    top: 16,
+    left: 16,
     width: 44,
     height: 44,
     borderRadius: 22,
