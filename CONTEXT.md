@@ -56,6 +56,7 @@
   - 빌드 ID: e7b4b91f-ce59-4907-8038-d6bf56d9b73d
 - TestFlight 재제출 완료 (빌드 번호 2, 빌드 ID: 93ed51e4)
 - 카카오 Client Secret 재발급 완료 (퍼블릭 레포 노출 대응)
+- 카카오 로그인 정상 작동 확인 (Supabase Client Secret 업데이트로 해결)
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
   - Supabase 연동
@@ -125,6 +126,7 @@
   - supabase.functions.invoke → fetch 직접 호출로 변경
   - Authorization Bearer 토큰 + apikey 헤더 전달
   - 변경 파일: app/settings.tsx
+- 회원탈퇴 정상 작동 확인 (public.users + auth.users 모두 삭제)
 - 상대방 프로필 보기 (10p 차감)
 - 매칭하기 기능 (일일 3회 무료, 매칭권 차감, 단방향 DM)
 - 채팅 탭 (채팅 목록, 실시간 채팅방, 매칭 후 자동 이동, 알림 벨 아이콘)
@@ -160,6 +162,7 @@
 - SMS 인증 로직 추가
 - 전화번호 중복 체크
 - users.phone unique 제약조건 추가
+- 광고 시청 기능 (광고 영상 연동 필요)
 
 ## Supabase 테이블
 ### 기존
