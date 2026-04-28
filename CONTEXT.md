@@ -169,6 +169,12 @@
 - 상점 화면 (홈 상단 버튼, 리워드 탭 매칭권 구매 버튼으로 진입)
 - 상점 피티권 탭 추가 (승인된 트레이너만 구매 가능)
 - 상점 상품 카드 원가 취소선 + 할인가 + 할인율 뱃지 표시
+- iOS 인앱결제(IAP) 구현 완료
+  - expo-in-app-purchases 연동
+  - App Store Connect 상품 등록 완료 (매칭권 6개, 트레이너 등록 1개)
+  - products 테이블 apple_product_id 컬럼 추가 및 매핑 완료
+  - 결제 성공 시 matching_tickets 증가, payments/point_logs 기록
+  - 결제 실패/취소 처리 포함
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

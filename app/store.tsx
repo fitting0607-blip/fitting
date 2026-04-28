@@ -1,10 +1,12 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import * as InAppPurchases from 'expo-in-app-purchases';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +21,7 @@ const MAIN = '#6C47FF';
 
 type StoreItem = {
   id: string;
+  apple_product_id: string;
   title: string;
   ticket_count: number;
   price: number;
@@ -35,6 +38,9 @@ export default function StoreScreen() {
   const [products, setProducts] = useState<StoreItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [tab, setTab] = useState<'matching' | 'pt'>('matching');
+  const [iapReady, setIapReady] = useState(false);
+  const [iapLoading, setIapLoading] = useState(false);
+  const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
@@ -71,15 +77,29 @@ export default function StoreScreen() {
     }
   }, []);
 
-  const loadProducts = useCallback(async (category: 'matching_ticket' | 'pt_ticket') => {
+  const loadProducts = useCallback(async (category: 'ticket' | 'matching_ticket' | 'pt_ticket') => {
     setProductsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id,title,ticket_count,original_price,price,discount_rate,bonus_points')
-        .eq('category', category)
-        .eq('is_active', true)
-        .order('price', { ascending: true });
+      const run = async (withIapCols: boolean) => {
+        const selectCols = withIapCols
+          ? 'id,title,ticket_count,original_price,price,discount_rate,bonus_points,apple_product_id'
+          : 'id,title,ticket_count,original_price,price,discount_rate,bonus_points';
+        const { data, error } = await supabase
+          .from('products')
+          .select(selectCols)
+          .eq('category', category)
+          .eq('is_active', true)
+          .order('price', { ascending: true });
+        return { data, error };
+      };
+
+      let { data, error } = await run(true);
+      if (error) {
+        const msg = String((error as any)?.message ?? '');
+        if (msg.includes('apple_product_id')) {
+          ({ data, error } = await run(false));
+        }
+      }
       if (error) throw error;
 
       const rows = (data ?? []) as {
@@ -90,6 +110,7 @@ export default function StoreScreen() {
         price: number | null;
         discount_rate: number | null;
         bonus_points: number | null;
+        apple_product_id?: string | null;
       }[];
 
       setProducts(
@@ -97,6 +118,7 @@ export default function StoreScreen() {
           .filter((r) => !!r?.id)
           .map((r) => ({
             id: r.id,
+            apple_product_id: String(r.apple_product_id ?? '').trim(),
             title: r.title ?? (category === 'pt_ticket' ? '피티권' : '매칭권'),
             ticket_count: typeof r.ticket_count === 'number' ? r.ticket_count : 0,
             original_price: typeof r.original_price === 'number' ? r.original_price : 0,
@@ -112,6 +134,82 @@ export default function StoreScreen() {
       setProductsLoading(false);
     }
   }, []);
+
+  const loadMatchingProducts = useCallback(async () => {
+    // 요구사항: category='ticket' 우선. 기존 데이터 호환을 위해 matching_ticket fallback.
+    setProductsLoading(true);
+    try {
+      const run = async (category: 'ticket' | 'matching_ticket') => {
+        const runQuery = async (withIapCols: boolean) => {
+          const selectCols = withIapCols
+            ? 'id,title,ticket_count,original_price,price,discount_rate,bonus_points,apple_product_id'
+            : 'id,title,ticket_count,original_price,price,discount_rate,bonus_points';
+          const { data, error } = await supabase
+            .from('products')
+            .select(selectCols)
+            .eq('category', category)
+            .eq('is_active', true)
+            .order('price', { ascending: true });
+          return { data, error };
+        };
+
+        let { data, error } = await runQuery(true);
+        if (error) {
+          const msg = String((error as any)?.message ?? '');
+          if (msg.includes('apple_product_id')) {
+            ({ data, error } = await runQuery(false));
+          }
+        }
+        if (error) throw error;
+
+        const rows = (data ?? []) as any[];
+        const mapped: StoreItem[] = rows
+          .filter((r) => !!r?.id)
+          .map((r) => ({
+            id: String(r.id),
+            apple_product_id: String(r.apple_product_id ?? '').trim(),
+            title: r.title ?? '매칭권',
+            ticket_count: typeof r.ticket_count === 'number' ? r.ticket_count : 0,
+            original_price: typeof r.original_price === 'number' ? r.original_price : 0,
+            price: typeof r.price === 'number' ? r.price : 0,
+            discount_rate: typeof r.discount_rate === 'number' ? r.discount_rate : 0,
+            bonus_points: typeof r.bonus_points === 'number' ? r.bonus_points : 0,
+          }));
+        return mapped;
+      };
+
+      const primary = await run('ticket');
+      if (primary.length > 0) {
+        setProducts(primary);
+        return;
+      }
+      const fallback = await run('matching_ticket');
+      setProducts(fallback);
+    } catch (e: any) {
+      Alert.alert('상품 불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+      setProducts([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  }, []);
+
+  const ensureIap = useCallback(async () => {
+    if (Platform.OS !== 'ios') return false;
+    if (iapReady) return true;
+    if (iapLoading) return false;
+    setIapLoading(true);
+    try {
+      const res = await InAppPurchases.connectAsync();
+      const ok = Boolean((res as any)?.connected ?? true);
+      setIapReady(ok);
+      return ok;
+    } catch {
+      setIapReady(false);
+      return false;
+    } finally {
+      setIapLoading(false);
+    }
+  }, [iapReady, iapLoading]);
 
   const loadMyPt = useCallback(async () => {
     setMyPtLoading(true);
@@ -150,15 +248,50 @@ export default function StoreScreen() {
     useCallback(() => {
       void load();
       void loadMyPt();
-      void loadProducts(tab === 'pt' ? 'pt_ticket' : 'matching_ticket');
-    }, [load, loadMyPt, loadProducts, tab])
+      void (async () => {
+        if (tab === 'pt') {
+          await loadProducts('pt_ticket');
+          return;
+        }
+        await loadMatchingProducts();
+      })();
+    }, [load, loadMyPt, loadProducts, loadMatchingProducts, tab])
   );
 
   const goBack = useCallback(() => router.back(), [router]);
 
-  const onItemPress = useCallback(() => {
-    Alert.alert('준비 중입니다');
-  }, []);
+  const onBuyMatchingTicket = useCallback(
+    async (item: StoreItem) => {
+      if (tab !== 'matching') return;
+      if (Platform.OS !== 'ios') {
+        Alert.alert('안내', '현재 iOS에서만 인앱결제를 지원합니다.');
+        return;
+      }
+      const sku = item.apple_product_id?.trim();
+      if (!sku) {
+        Alert.alert('구매 불가', '상품 정보가 올바르지 않습니다.');
+        return;
+      }
+      if (purchasingSku) return;
+
+      const ok = await ensureIap();
+      if (!ok) {
+        Alert.alert('결제 준비 실패', '인앱결제 초기화에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+
+      setPurchasingSku(sku);
+      try {
+        // SKU 유효성 확인(스토어에 등록되지 않은 SKU면 여기서 실패 가능)
+        await InAppPurchases.getProductsAsync([sku]);
+        await InAppPurchases.purchaseItemAsync(sku);
+      } catch (e: any) {
+        Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+        setPurchasingSku(null);
+      }
+    },
+    [tab, purchasingSku, ensureIap]
+  );
 
   const buyPt = useCallback(() => {
     Alert.alert('결제 기능은 준비 중입니다.');
@@ -175,6 +308,158 @@ export default function StoreScreen() {
 
   const hasAnyProducts = products.length > 0;
   const productsEmpty = useMemo(() => !productsLoading && !hasAnyProducts, [productsLoading, hasAnyProducts]);
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let mounted = true;
+
+    const sub = InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
+      if (!mounted) return;
+
+      // cancelled
+      if (responseCode === (InAppPurchases as any).IAPResponseCode?.USER_CANCELED) {
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (user?.id) {
+            const item =
+              products.find((p) => p.apple_product_id.trim() === (purchasingSku ?? '').trim()) ?? null;
+            await supabase.from('payments').insert({
+              user_id: user.id,
+              product_id: item?.id ?? null,
+              product_title: item?.title ?? purchasingSku ?? 'IAP',
+              amount: typeof item?.price === 'number' ? item.price : null,
+              status: 'cancelled',
+            });
+          }
+        } catch {
+          // ignore
+        }
+        setPurchasingSku(null);
+        Alert.alert('결제 취소', '결제가 취소되었습니다.');
+        return;
+      }
+
+      // generic error
+      if (
+        responseCode !== (InAppPurchases as any).IAPResponseCode?.OK &&
+        responseCode !== 0 // 일부 환경에서 OK=0
+      ) {
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (user?.id) {
+            const item =
+              products.find((p) => p.apple_product_id.trim() === (purchasingSku ?? '').trim()) ?? null;
+            await supabase.from('payments').insert({
+              user_id: user.id,
+              product_id: item?.id ?? null,
+              product_title: item?.title ?? purchasingSku ?? 'IAP',
+              amount: typeof item?.price === 'number' ? item.price : null,
+              status: 'failed',
+            });
+          }
+        } catch {
+          // ignore
+        }
+        setPurchasingSku(null);
+        Alert.alert('결제 실패', errorCode ? String(errorCode) : '결제 처리 중 오류가 발생했습니다.');
+        return;
+      }
+
+      const purchases = Array.isArray(results) ? results : [];
+      if (purchases.length === 0) {
+        setPurchasingSku(null);
+        return;
+      }
+
+      for (const purchase of purchases) {
+        try {
+          const state = (purchase as any)?.purchaseState;
+          const purchased =
+            state === (InAppPurchases as any).IAPPurchaseState?.PURCHASED || state === 1;
+          if (!purchased) continue;
+
+          const sku = String((purchase as any)?.productId ?? '').trim();
+          const item =
+            products.find((p) => p.apple_product_id.trim() === sku) ??
+            products.find((p) => p.id === sku) ??
+            null;
+
+          const {
+            data: { user },
+            error: authError,
+          } = await supabase.auth.getUser();
+          if (authError) throw authError;
+          if (!user?.id) throw new Error('로그인이 필요합니다.');
+
+          const { data: me, error: meError } = await supabase
+            .from('users')
+            .select('points,matching_tickets')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (meError) throw meError;
+          const curTickets = typeof (me as any)?.matching_tickets === 'number' ? (me as any).matching_tickets : 0;
+          const curPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
+
+          const addTickets = Math.max(0, item?.ticket_count ?? 0);
+          const addPoints = Math.max(0, item?.bonus_points ?? 0);
+
+          const { error: upErr } = await supabase
+            .from('users')
+            .update({
+              matching_tickets: curTickets + addTickets,
+              ...(addPoints > 0 ? { points: curPoints + addPoints } : {}),
+            })
+            .eq('id', user.id);
+          if (upErr) throw upErr;
+
+          // point_logs 기록(요구사항)
+          await supabase.from('point_logs').insert({
+            user_id: user.id,
+            amount: addPoints > 0 ? addPoints : 0,
+            reason: addPoints > 0 ? 'ticket_purchase_bonus' : 'ticket_purchase',
+          });
+
+          // payments 저장(요구사항)
+          await supabase.from('payments').insert({
+            user_id: user.id,
+            product_id: item?.id ?? null,
+            product_title: item?.title ?? sku,
+            amount: typeof item?.price === 'number' ? item.price : null,
+            status: 'succeeded',
+          });
+
+          await InAppPurchases.finishTransactionAsync(purchase, false);
+
+          setPoints(curPoints + addPoints);
+          setMatchingTickets(curTickets + addTickets);
+          Alert.alert('결제 완료', '매칭권이 지급됐어요.');
+        } catch (e: any) {
+          Alert.alert('결제 처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+        } finally {
+          setPurchasingSku(null);
+        }
+      }
+    });
+
+    // 초기 연결은 best-effort
+    void ensureIap();
+
+    return () => {
+      mounted = false;
+      try {
+        // expo-in-app-purchases는 remove API가 없어서 listener를 빈 함수로 덮어씌움
+        if (typeof sub === 'function') sub();
+        InAppPurchases.setPurchaseListener(() => {});
+      } catch {
+        // ignore
+      }
+      void InAppPurchases.disconnectAsync();
+    };
+  }, [ensureIap, products]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -260,7 +545,7 @@ export default function StoreScreen() {
                     style: styles.row,
                   }
                 : {
-                    onPress: onItemPress,
+                    onPress: () => void onBuyMatchingTicket(item),
                     style: ({ pressed }: { pressed: boolean }) =>
                       [styles.row, pressed && styles.rowPressed] as any,
                     accessibilityRole: 'button' as const,
@@ -320,7 +605,11 @@ export default function StoreScreen() {
                   </Text>
                 </Pressable>
               ) : (
-                <Feather name="chevron-right" size={20} color="#9CA3AF" />
+                purchasingSku && purchasingSku === item.apple_product_id.trim() ? (
+                  <ActivityIndicator size="small" color={MAIN} />
+                ) : (
+                  <Feather name="chevron-right" size={20} color="#9CA3AF" />
+                )
               )}
               </RowWrap>
             );
