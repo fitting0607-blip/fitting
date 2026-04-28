@@ -17,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { insertMyNotification } from '@/notification-insert';
+import { requestPushSend } from '@/app/utils/pushApi';
 import { supabase } from '../supabase';
 
 type MessageRow = {
@@ -319,6 +320,14 @@ export default function ChatRoomScreen() {
           requestAnimationFrame(() => {
             listRef.current?.scrollToEnd({ animated: true });
           });
+
+        // Push to the other participant (server-side creates notifications row for recipient)
+        void requestPushSend({
+          mode: 'message',
+          roomId,
+          messageId: inserted.id,
+          route: { pathname: '/chat-room', params: { roomId } },
+        });
         }
       )
       .subscribe();

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { insertMyNotification } from '@/notification-insert';
+import { requestPushSend } from '@/app/utils/pushApi';
 import { supabase } from '../../supabase';
 
 const MAIN = '#3B3BF9';
@@ -90,6 +91,14 @@ export function usePostLike() {
       post_id: postId,
     });
     if (insError) throw insError;
+
+    // Push to post author (best-effort). DB trigger already inserts notifications row for author.
+    void requestPushSend({
+      mode: 'latest_by_related',
+      recipientUserId: authorId,
+      type: 'like',
+      relatedId: postId,
+    });
 
     const { data: authorRow, error: authorErr } = await supabase
       .from('users')

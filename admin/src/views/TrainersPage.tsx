@@ -1,6 +1,40 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
+async function sendTrainerApprovedPush(params: { recipientUserId: string; trainerProfileId: string }) {
+  const { data, error } = await supabase.auth.getSession()
+  if (error) throw error
+  const token = data.session?.access_token
+  if (!token) throw new Error('로그인이 필요합니다.')
+
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+  if (!baseUrl || !anonKey) throw new Error('환경변수(VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)가 필요합니다.')
+
+  const res = await fetch(`${String(baseUrl).replace(/\/$/, '')}/functions/v1/send-push`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: String(anonKey),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      mode: 'direct',
+      recipientUserId: params.recipientUserId,
+      type: 'trainer_approved',
+      content:
+        '트레이너 승인이 완료되었습니다. 이제 핏팅에서 트레이너로 활동할 수 있습니다.',
+      relatedId: params.trainerProfileId,
+      route: { pathname: '/trainer-apply' },
+    }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `푸시 발송 실패 (HTTP ${res.status})`)
+  }
+}
+
 type TrainerProfileRow = {
   id: string
   user_id: string
@@ -224,6 +258,14 @@ export function TrainersPage() {
     if (error) {
       alert(error.message)
       return
+    }
+
+    // Push + notifications insert (best-effort)
+    try {
+      await sendTrainerApprovedPush({ recipientUserId: r.user_id, trainerProfileId: r.id })
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.warn('[admin] trainer approved push failed', e?.message ?? e)
     }
 
     if (data) {

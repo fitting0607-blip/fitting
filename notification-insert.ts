@@ -3,7 +3,7 @@ import { supabase } from '@/supabase';
 /** 내 user_id로만 INSERT (RLS). 실패해도 메인 플로우는 유지. */
 export async function insertMyNotification(params: {
   userId: string;
-  type: 'match' | 'point';
+  type: 'match' | 'like' | 'message' | 'point';
   content: string;
   related_id?: string | null;
 }): Promise<void> {

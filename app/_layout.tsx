@@ -1,11 +1,12 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Redirect, Stack, useSegments } from 'expo-router';
+import { Redirect, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { attachNotificationResponseHandler, ensureExpoNotificationHandlerInstalled, registerAndSavePushToken } from '@/app/utils/push';
 import { supabase } from '../supabase';
 
 export const unstable_settings = {
@@ -15,11 +16,14 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const segments = useSegments();
+  const router = useRouter();
   const [isReady, setIsReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+
+    ensureExpoNotificationHandlerInstalled();
 
     supabase.auth
       .getSession()
@@ -43,6 +47,20 @@ export default function RootLayout() {
       authListener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    // (best-effort) register push token once we have a session
+    if (!hasSession) return;
+    void registerAndSavePushToken();
+  }, [hasSession]);
+
+  useEffect(() => {
+    // handle notification taps
+    const detach = attachNotificationResponseHandler((route) => {
+      router.push(route as any);
+    });
+    return detach;
+  }, [router]);
 
   const inAuthGroup = segments[0] === '(auth)';
 

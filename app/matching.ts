@@ -2,6 +2,7 @@ import { Alert } from 'react-native';
 import { router } from 'expo-router';
 
 import { insertMyNotification } from '@/notification-insert';
+import { requestPushSend } from '@/app/utils/pushApi';
 import { supabase } from '../supabase';
 
 let matchRequestInFlight = false;
@@ -164,6 +165,20 @@ export async function runMatchRequest(
     await consumeTicketIfNeeded(myId, todaySentCountBeforeThis);
 
     const { matchId, roomId } = await createMatchRequest(myId, targetUserId);
+
+    // Push to target (best-effort). DB trigger already inserts notifications row for target.
+    try {
+      const myNicknameForTarget = await getUserNickname(myId);
+      await requestPushSend({
+        mode: 'latest_by_related',
+        recipientUserId: targetUserId,
+        type: 'match',
+        relatedId: matchId,
+        route: { pathname: '/chat-room', params: { roomId, nickname: myNicknameForTarget } },
+      });
+    } catch {
+      // ignore
+    }
 
     const { data: meAfterMatch, error: mePointsError } = await supabase
       .from('users')

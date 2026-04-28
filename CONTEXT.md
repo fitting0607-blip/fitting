@@ -179,6 +179,12 @@
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
 - 알림에서 프로필 보기 기능
+- 푸시알림 구현 완료
+  - expo-notifications 연동, Expo Push Token 발급 후 users.fcm_token 저장
+  - 이벤트별 푸시 발송: 새 매칭, 새 메시지, 좋아요 수신 시
+  - 알림 클릭 시 해당 화면으로 이동
+  - 트레이너 승인 시 푸시알림 발송 (관리자 웹 연동)
+  - send-push Edge Function 배포 완료
 - 신고 기능 (신고 사유 6가지, reports 테이블)
 - 신고 화면 키보드 내려가기 수정 (빈 화면 터치 시 Keyboard.dismiss)
 - 차단 기능 (차단/해제, 차단목록, 홈 피드 필터링)
