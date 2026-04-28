@@ -63,6 +63,10 @@
   - SUPABASE_SERVICE_ROLE_KEY는 Supabase 예약 시크릿으로 자동 관리됨
   - delete-account Edge Function: SUPABASE_SERVICE_ROLE_KEY 우선 사용하도록 수정 후 재배포 완료
   - TestFlight 재빌드 필요 (기존 빌드에 구 anon 키 박혀있음)
+- Legacy JWT 키 비활성화 완료
+  - Legacy anon/service_role 키 Disable JWT-based API keys로 비활성화
+  - 앱 .env 및 admin/.env 새 publishable 키로 교체 완료
+  - .env .gitignore에 추가 완료 (GitHub 노출 방지)
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
   - Supabase 연동
