@@ -114,6 +114,11 @@
   - 홈 피드 카드 여백 명시적 수정
     - cardInnerWidth = cardWidth - 40으로 명시적 계산
     - 변경 파일: app/(tabs)/index.tsx
+  - 홈 피드 이미지 크롭 기능 구현
+    - 게시물 작성 시 드래그로 이미지 위치 조절
+    - image_transform 컬럼 추가 (posts 테이블)
+    - 피드에서 image_transform 기반으로 이미지 표시
+    - 변경 파일: app/post-create.tsx, app/(tabs)/index.tsx, app/utils/imageTransform.ts
 - 홈 피드 필터 및 정렬:
   - 성별 필터 (남성=여성 게시물만, 여성=남성 게시물만)
   - 이미 매칭한 유저 게시물 제외
@@ -175,6 +180,7 @@
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
+- 홈 피드 카드 오른쪽 이미지 살짝 잘림 (추후 수정 필요)
 
 ## 추후 작업
 - SMS 인증 로직 추가
