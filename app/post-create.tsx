@@ -5,7 +5,10 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
+  Animated,
+  Dimensions,
   KeyboardAvoidingView,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -18,16 +21,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '../supabase';
 import { decodeBase64ToBytes, PUBLIC_UPLOAD_BUCKET } from './utils/imageBytes';
+import {
+  clampTranslate,
+  coverBaseScale,
+  isImageTransformV1,
+  type ImageTransformV1,
+} from './utils/imageTransform';
 
 type FeedType = '일반' | '바디';
 
 const MAIN = '#3B3BF9';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CROP_ASPECT = 4 / 5;
 
 export default function PostCreateScreen() {
   const router = useRouter();
   const [feedType, setFeedType] = useState<FeedType>('일반');
   const [content, setContent] = useState('');
   const [imageAsset, setImageAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [imageTransform, setImageTransform] = useState<ImageTransformV1 | null>(null);
+  const [cropModalVisible, setCropModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = imageAsset != null && !submitting;
@@ -50,11 +63,17 @@ export default function PostCreateScreen() {
     if (result.canceled) return;
 
     const picked = result.assets?.[0];
-    if (picked) setImageAsset(picked);
+    if (picked) {
+      setImageAsset(picked);
+      setImageTransform(null);
+      setCropModalVisible(true);
+    }
   }, []);
 
   const clearImage = useCallback(() => {
     setImageAsset(null);
+    setImageTransform(null);
+    setCropModalVisible(false);
   }, []);
 
   const uploadAndCreate = useCallback(async () => {
@@ -102,13 +121,40 @@ export default function PostCreateScreen() {
         publicUrl: data.publicUrl,
       });
 
-      const { error: insertError } = await supabase.from('posts').insert({
+      // Store original image, and store only transform metadata for display crop.
+      // If the DB column doesn't exist yet, fall back to legacy insert (but crop won't persist).
+      const payload: any = {
         user_id: user.id,
         content: content.trim(),
         post_type: feedType,
         image_urls: imageUrls,
+      };
+      if (imageTransform && isImageTransformV1(imageTransform)) {
+        payload.image_transform = imageTransform;
+      }
+
+      let insertError: any = null;
+      {
+        const res = await supabase.from('posts').insert(payload);
+        insertError = res.error ?? null;
+      }
+
+      if (insertError && String(insertError.message ?? '').includes('image_transform')) {
+        const legacyRes = await supabase.from('posts').insert({
+          user_id: user.id,
+          content: content.trim(),
+          post_type: feedType,
+          image_urls: imageUrls,
+        });
+        insertError = legacyRes.error ?? null;
+      }
+
+      console.log('[PostCreate] insert posts', {
+        ok: !insertError,
+        image_urls: imageUrls,
+        has_transform: !!imageTransform,
+        error: insertError?.message ?? null,
       });
-      console.log('[PostCreate] insert posts', { ok: !insertError, image_urls: imageUrls, error: insertError?.message ?? null });
       if (insertError) throw insertError;
 
       router.replace('/(tabs)');
@@ -117,7 +163,7 @@ export default function PostCreateScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [imageAsset, canSubmit, content, feedType, router]);
+  }, [imageAsset, canSubmit, content, feedType, imageTransform, router]);
 
   const nextTextStyle = useMemo(
     () => [styles.nextText, canSubmit ? styles.nextTextActive : styles.nextTextDisabled],
@@ -177,6 +223,15 @@ export default function PostCreateScreen() {
                     transition={120}
                   />
                   <Pressable
+                    onPress={() => setCropModalVisible(true)}
+                    style={styles.editBtn}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="사진 구도 조절"
+                  >
+                    <Feather name="move" size={14} color="#FFFFFF" />
+                  </Pressable>
+                  <Pressable
                     onPress={clearImage}
                     style={styles.removeBtn}
                     hitSlop={10}
@@ -223,6 +278,20 @@ export default function PostCreateScreen() {
           </View>
         </View>
 
+        {imageAsset && cropModalVisible ? (
+          <CropModal
+            uri={imageAsset.uri}
+            imgW={typeof imageAsset.width === 'number' ? imageAsset.width : 0}
+            imgH={typeof imageAsset.height === 'number' ? imageAsset.height : 0}
+            initial={imageTransform}
+            onCancel={() => setCropModalVisible(false)}
+            onDone={(t) => {
+              setImageTransform(t);
+              setCropModalVisible(false);
+            }}
+          />
+        ) : null}
+
         <View style={styles.bottomArea}>
           <Pressable
             onPress={uploadAndCreate}
@@ -240,6 +309,165 @@ export default function PostCreateScreen() {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function CropModal({
+  uri,
+  imgW,
+  imgH,
+  initial,
+  onCancel,
+  onDone,
+}: {
+  uri: string;
+  imgW: number;
+  imgH: number;
+  initial: ImageTransformV1 | null;
+  onCancel: () => void;
+  onDone: (t: ImageTransformV1) => void;
+}) {
+  const viewportW = SCREEN_WIDTH;
+  const viewportH = Math.round(SCREEN_WIDTH / CROP_ASPECT);
+
+  const safeImgW = imgW > 0 ? imgW : 1080;
+  const safeImgH = imgH > 0 ? imgH : 1350;
+
+  const baseScale = coverBaseScale({
+    viewportW,
+    viewportH,
+    imgW: safeImgW,
+    imgH: safeImgH,
+  });
+
+  const initTx = initial ? initial.ox * viewportW : 0;
+  const initTy = initial ? initial.oy * viewportH : 0;
+
+  // Simplified: drag only (no pinch-zoom) to avoid gesture-handler/reanimated crashes.
+  // Always render as cover-fit baseline scale, and clamp translation.
+  const scale = baseScale;
+  const translate = React.useRef(new Animated.ValueXY({ x: initTx, y: initTy })).current;
+  const start = React.useRef({ x: initTx, y: initTy });
+
+  const clampAndSet = useCallback(
+    (x: number, y: number) => {
+      const clamped = clampTranslate({
+        viewportW,
+        viewportH,
+        imgW: safeImgW,
+        imgH: safeImgH,
+        scale,
+        tx: x,
+        ty: y,
+      });
+      translate.setValue({ x: clamped.tx, y: clamped.ty });
+      start.current = { x: clamped.tx, y: clamped.ty };
+    },
+    [imgW, imgH, safeImgH, safeImgW, scale, translate, viewportH, viewportW]
+  );
+
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          translate.stopAnimation((v: any) => {
+            start.current = { x: typeof v?.x === 'number' ? v.x : start.current.x, y: typeof v?.y === 'number' ? v.y : start.current.y };
+          });
+        },
+        onPanResponderMove: (_evt, gestureState) => {
+          const nextX = start.current.x + gestureState.dx;
+          const nextY = start.current.y + gestureState.dy;
+          // clamp live to prevent revealing empty space
+          const clamped = clampTranslate({
+            viewportW,
+            viewportH,
+            imgW: safeImgW,
+            imgH: safeImgH,
+            scale,
+            tx: nextX,
+            ty: nextY,
+          });
+          translate.setValue({ x: clamped.tx, y: clamped.ty });
+        },
+        onPanResponderRelease: () => {
+          translate.stopAnimation((v: any) => {
+            const x = typeof v?.x === 'number' ? v.x : 0;
+            const y = typeof v?.y === 'number' ? v.y : 0;
+            clampAndSet(x, y);
+          });
+        },
+        onPanResponderTerminate: () => {
+          translate.stopAnimation((v: any) => {
+            const x = typeof v?.x === 'number' ? v.x : 0;
+            const y = typeof v?.y === 'number' ? v.y : 0;
+            clampAndSet(x, y);
+          });
+        },
+      }),
+    [clampAndSet, safeImgH, safeImgW, scale, translate, viewportH, viewportW]
+  );
+
+  return (
+    <View style={styles.cropOverlay}>
+      <View style={styles.cropTopBar}>
+        <Pressable
+          onPress={onCancel}
+          hitSlop={10}
+          style={styles.cropTopBtn}
+          accessibilityRole="button"
+          accessibilityLabel="취소"
+        >
+          <Text style={styles.cropTopBtnText}>취소</Text>
+        </Pressable>
+        <Text style={styles.cropTitle}>미리보기</Text>
+        <Pressable
+          onPress={() => {
+            // Zoom disabled in simplified mode.
+            const zoom = 1;
+            // Read final translation from Animated.ValueXY
+            const x = (translate.x as any).__getValue?.() ?? 0;
+            const y = (translate.y as any).__getValue?.() ?? 0;
+            onDone({
+              v: 1,
+              imgW: safeImgW,
+              imgH: safeImgH,
+              zoom,
+              ox: x / viewportW,
+              oy: y / viewportH,
+            });
+          }}
+          hitSlop={10}
+          style={styles.cropTopBtn}
+          accessibilityRole="button"
+          accessibilityLabel="완료"
+        >
+          <Text style={[styles.cropTopBtnText, styles.cropTopBtnTextDone]}>완료</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.cropHintRow}>
+        <Text style={styles.cropHintText}>드래그로 위치 조절</Text>
+      </View>
+
+      <View style={[styles.cropViewport, { width: viewportW, height: viewportH }]}>
+        <View style={styles.cropViewportInner} {...panResponder.panHandlers}>
+          <Animated.Image
+            source={{ uri }}
+            style={[
+              {
+                width: safeImgW,
+                height: safeImgH,
+              },
+              {
+                transform: [{ translateX: translate.x }, { translateY: translate.y }, { scale }],
+              },
+            ]}
+            resizeMode="cover"
+          />
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -364,6 +592,17 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  editBtn: {
+    position: 'absolute',
+    right: 34,
+    top: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   removeBtn: {
     position: 'absolute',
     right: 6,
@@ -417,6 +656,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111111',
     lineHeight: 20,
+  },
+
+  cropOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+  },
+  cropTopBar: {
+    height: 56,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#000000',
+  },
+  cropTopBtn: {
+    minWidth: 64,
+    height: 44,
+    justifyContent: 'center',
+  },
+  cropTopBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  cropTopBtnTextDone: {
+    color: MAIN,
+  },
+  cropTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  cropHintRow: {
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+  },
+  cropHintText: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cropViewport: {
+    alignSelf: 'center',
+    overflow: 'hidden',
+    backgroundColor: '#000000',
+  },
+  cropViewportInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

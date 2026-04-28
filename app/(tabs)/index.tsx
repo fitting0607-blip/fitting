@@ -1,11 +1,8 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Dimensions,
   FlatList,
   Modal,
-  Platform,
-  PixelRatio,
   Pressable,
   StyleSheet,
   Text,
@@ -13,8 +10,9 @@ import {
   Image as RNImage,
   Alert,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -27,6 +25,7 @@ import { insertMyNotification } from '@/notification-insert';
 import { supabase } from '../../supabase';
 import { useMatchModal } from '../hooks/useMatchModal';
 import { usePostLike } from '../hooks/usePostLike';
+import { isImageTransformV1, resolveTransformForViewport, type ImageTransformV1 } from '../utils/imageTransform';
 
 type FeedTab = '일반' | '바디';
 
@@ -47,6 +46,7 @@ type PostFeedRow = {
   content: string | null;
   post_type: FeedTab;
   image_urls: string[] | null;
+  image_transform?: ImageTransformV1 | null;
   created_at: string;
   user?: PostUser | null;
   display_image_urls: string[];
@@ -57,9 +57,6 @@ type TagItem = { kind: TagKind; label: string };
 
 const MAIN = '#3B3BF9';
 const ATTENDANCE_MODAL_MAIN = '#6C47FF';
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const MAX_FEED_WIDTH_WEB = 430;
-
 function getTodayRangeISO() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -70,11 +67,14 @@ function getTodayRangeISO() {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  /** Must match `Dimensions.get('window').width` (paging / item width). */
+  const pageWidth = windowWidth;
   const tabBarHeight = useBottomTabBarHeight();
   const [selectedTab, setSelectedTab] = useState<FeedTab>('일반');
   const [posts, setPosts] = useState<PostFeedRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [feedListWidth, setFeedListWidth] = useState(PixelRatio.roundToNearestPixel(SCREEN_WIDTH));
   const [headerHeight, setHeaderHeight] = useState(0);
   const [feedBarHeight, setFeedBarHeight] = useState(0);
 
@@ -224,19 +224,15 @@ export default function HomeScreen() {
 
   const cardHeight = useMemo(() => {
     const taken = headerHeight + feedBarHeight + tabBarHeight;
-    const remaining = Math.floor(SCREEN_HEIGHT - taken);
+    const remaining = Math.floor(windowHeight - taken);
     return remaining > 0 ? remaining : 0;
-  }, [feedBarHeight, headerHeight, tabBarHeight]);
+  }, [feedBarHeight, headerHeight, tabBarHeight, windowHeight]);
 
   const photoHeight = useMemo(() => {
     return cardHeight > 0 ? Math.round(cardHeight * 0.72) : 0;
   }, [cardHeight]);
 
-  const cardWidth = useMemo(() => {
-    return feedListWidth > 0
-      ? PixelRatio.roundToNearestPixel(feedListWidth)
-      : PixelRatio.roundToNearestPixel(SCREEN_WIDTH);
-  }, [feedListWidth]);
+  const cardWidth = pageWidth;
 
   const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
     const list = (urls ?? []).filter(Boolean);
@@ -317,6 +313,7 @@ export default function HomeScreen() {
           content,
           post_type,
           image_urls,
+          image_transform,
           created_at
         `)
         .eq('post_type', selectedTab)
@@ -436,16 +433,31 @@ export default function HomeScreen() {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
+  const getItemLayout = useCallback(
+    (_data: ArrayLike<PostFeedRow> | null | undefined, index: number) => ({
+      length: pageWidth,
+      offset: pageWidth * index,
+      index,
+    }),
+    [pageWidth]
+  );
+
   const renderCard = useCallback(
     ({ item }: { item: PostFeedRow }) => {
       if (cardWidth === 0 || cardHeight === 0 || photoHeight === 0) return null;
-      const cardInsetX = 20;
-      const cardInnerWidth = Math.max(0, cardWidth - cardInsetX * 2);
+      const overlayPadH = Math.max(16, insets.left);
+      const overlayPadHRight = Math.max(16, insets.right);
       const id = String(item.id ?? '');
       const nickname = item.user?.nickname ? String(item.user.nickname) : '알 수 없음';
       const mbti = item.user?.mbti ? String(item.user.mbti) : '';
       const title = mbti ? `${nickname} · ${mbti}` : nickname;
       const thumb = item.display_image_urls?.[0] ?? item.image_urls?.[0] ?? null;
+      const tRaw = (item as any)?.image_transform ?? null;
+      const t = isImageTransformV1(tRaw) ? (tRaw as ImageTransformV1) : null;
+      const renderT =
+        t && cardWidth > 0 && photoHeight > 0
+          ? resolveTransformForViewport({ viewportW: cardWidth, viewportH: photoHeight, transform: t })
+          : null;
 
       const tagsAll: TagItem[] = [
         ...(item.user?.sports?.length
@@ -463,8 +475,8 @@ export default function HomeScreen() {
       const tagsToShow = expanded ? tagsAll : [];
 
       return (
-        <View style={{ width: cardWidth, paddingHorizontal: cardInsetX }}>
-          <View style={[styles.cardShell, { width: cardInnerWidth, height: cardHeight }]}>
+        <View style={{ width: cardWidth, paddingHorizontal: 0 }}>
+          <View style={[styles.cardShell, { width: cardWidth, height: cardHeight }]}>
             <ScrollView
               style={{ height: cardHeight }}
               contentContainerStyle={styles.cardScrollContent}
@@ -473,11 +485,28 @@ export default function HomeScreen() {
               bounces={false}
             >
               <View style={[styles.photoArea, { width: '100%', height: photoHeight }]}>
-                {thumb ? (
+                {thumb && !renderT ? (
+                  <RNImage source={{ uri: thumb }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                ) : null}
+                {thumb && renderT && t ? (
                   <RNImage
                     source={{ uri: thumb }}
-                    style={{ width: '100%', height: '100%' }}
                     resizeMode="cover"
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
+                      width: t.imgW,
+                      height: t.imgH,
+                      transform: [
+                        // center the image, then apply user translation/scale
+                        { translateX: -t.imgW / 2 },
+                        { translateY: -t.imgH / 2 },
+                        { translateX: renderT.tx },
+                        { translateY: renderT.ty },
+                        { scale: renderT.scale },
+                      ],
+                    }}
                   />
                 ) : null}
                 {!thumb ? <View style={styles.photoPlaceholder} /> : null}
@@ -485,7 +514,7 @@ export default function HomeScreen() {
                 <Pressable
                   onPress={() => openMatchModal(String(item.user_id ?? ''))}
                   hitSlop={10}
-                  style={styles.matchTicketBtn}
+                  style={[styles.matchTicketBtn, { right: overlayPadHRight }]}
                   accessibilityRole="button"
                   accessibilityLabel="매칭권 사용"
                 >
@@ -495,7 +524,7 @@ export default function HomeScreen() {
                 <Pressable
                   onPress={() => void handleToggleLike(id, String(item.user_id ?? ''))}
                   hitSlop={10}
-                  style={styles.heartBtn}
+                  style={[styles.heartBtn, { left: overlayPadH }]}
                   accessibilityRole="button"
                   accessibilityLabel="하트"
                 >
@@ -575,6 +604,8 @@ export default function HomeScreen() {
       cardHeight,
       cardWidth,
       expandedIds,
+      insets.left,
+      insets.right,
       likedIds,
       photoHeight,
       toggleExpanded,
@@ -743,21 +774,14 @@ export default function HomeScreen() {
             if (cardWidth === 0 || cardHeight === 0) return null;
             return renderCard(info);
           }}
-          style={styles.feedList}
+          style={[styles.feedList, { width: pageWidth }]}
           contentContainerStyle={[styles.feedListContent, { paddingBottom: 100 }]}
-          onLayout={(e) => {
-            const w = e.nativeEvent.layout.width;
-            // Only constrain width on web; on native, FlatList width should match the viewport width.
-            setFeedListWidth(
-              Platform.OS === 'web' ? Math.min(w, MAX_FEED_WIDTH_WEB) : PixelRatio.roundToNearestPixel(w)
-            );
-            console.log('[HomeFeed] FlatList layout', {
-              w,
-              h: e.nativeEvent.layout.height,
-            });
-          }}
           horizontal
           pagingEnabled
+          snapToInterval={pageWidth}
+          snapToAlignment="start"
+          disableIntervalMomentum
+          getItemLayout={getItemLayout}
           showsHorizontalScrollIndicator={false}
           decelerationRate="fast"
           bounces={false}
@@ -844,7 +868,8 @@ const styles = StyleSheet.create({
   },
 
   cardShell: {
-    borderRadius: 18,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -871,7 +896,6 @@ const styles = StyleSheet.create({
   },
   matchTicketBtn: {
     position: 'absolute',
-    right: 16,
     top: 16,
     width: 44,
     height: 44,
@@ -884,7 +908,6 @@ const styles = StyleSheet.create({
   heartBtn: {
     position: 'absolute',
     top: 16,
-    left: 16,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -1003,9 +1026,7 @@ const styles = StyleSheet.create({
 
   feedList: {
     flex: 1,
-    width: '100%',
-    alignSelf: 'center',
-    ...(Platform.OS === 'web' ? { maxWidth: MAX_FEED_WIDTH_WEB } : {}),
+    alignSelf: 'stretch',
   },
   feedListContent: {
     paddingBottom: 16,
