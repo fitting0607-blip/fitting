@@ -21,9 +21,11 @@ Deno.serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')?.trim()
-  const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY')?.trim()
+  // Prefer Supabase reserved secret name; keep legacy fallback for older deployments.
+  const serviceRoleKey =
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim() ?? Deno.env.get('SERVICE_ROLE_KEY')?.trim()
   if (!supabaseUrl || !serviceRoleKey) {
-    return json(500, { error: 'Missing SUPABASE_URL or SERVICE_ROLE_KEY' })
+    return json(500, { error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY' })
   }
 
   const authHeader = req.headers.get('Authorization') ?? ''
