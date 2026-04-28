@@ -2,7 +2,7 @@
   "expo": {
     "name": "fitting",
     "slug": "fitting",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "fitting",
@@ -10,7 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hywoo.fitting"
+      "bundleIdentifier": "com.hywoo.fitting",
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
