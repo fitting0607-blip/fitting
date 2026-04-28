@@ -57,6 +57,12 @@
 - TestFlight 재제출 완료 (빌드 번호 2, 빌드 ID: 93ed51e4)
 - 카카오 Client Secret 재발급 완료 (퍼블릭 레포 노출 대응)
 - 카카오 로그인 정상 작동 확인 (Supabase Client Secret 업데이트로 해결)
+- 보안 키 재발급 완료
+  - JWT Secret 재발급 (ECC P-256 새 키로 교체)
+  - SUPABASE_ANON_KEY 교체 (.env, EAS 대시보드)
+  - SUPABASE_SERVICE_ROLE_KEY는 Supabase 예약 시크릿으로 자동 관리됨
+  - delete-account Edge Function: SUPABASE_SERVICE_ROLE_KEY 우선 사용하도록 수정 후 재배포 완료
+  - TestFlight 재빌드 필요 (기존 빌드에 구 anon 키 박혀있음)
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
   - Supabase 연동
