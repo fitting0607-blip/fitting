@@ -8,6 +8,7 @@ import {
   Text,
   View,
   Image as RNImage,
+  Image,
   Alert,
   ScrollView,
   useWindowDimensions,
@@ -633,7 +634,11 @@ export default function HomeScreen() {
             <Text style={styles.headerStoreLabel}>상점</Text>
           </Pressable>
 
-          <Text style={styles.headerTitle}>fitting</Text>
+          <Image
+            source={require('../../assets/images/logo.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
 
           <Pressable
             onPress={() => router.push('/notifications')}
@@ -830,10 +835,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111111',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111111',
+  headerLogo: {
+    width: 100,
+    height: 36,
   },
 
   feedBar: {
