@@ -13,6 +13,7 @@
 - 닉네임 중복 체크 (500ms debounce 실시간 검증, 사용가능/중복 표시)
 - users 테이블 nickname unique constraint 추가
 - 로그인/로그아웃
+- 로고 이미지 적용 (로그인 화면, 홈 헤더) — assets/images/logo.png 사용
 - 카카오 로그인 (Supabase kakao provider 연동, 리다이렉트 URI 설정 완료)
 - 카카오 로그인 redirectTo URL 수정
   - fitting://auth/callback → https://umblarikptpbjqliixqc.supabase.co/auth/v1/callback 으로 변경

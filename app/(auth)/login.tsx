@@ -5,6 +5,7 @@ import { Link, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   Keyboard,
   Platform,
   Pressable,
@@ -386,7 +387,11 @@ export default function LoginScreen() {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
-        <Text style={styles.title}>fitting</Text>
+        <Image
+          source={require('../../assets/images/logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
 
         <Text style={styles.label}>이메일</Text>
         <TextInput
@@ -464,10 +469,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#fff',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    textAlign: 'center',
+  logoImage: {
+    width: 160,
+    height: 60,
+    alignSelf: 'center',
     marginBottom: 28,
   },
   label: {
