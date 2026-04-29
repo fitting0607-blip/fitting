@@ -31,6 +31,14 @@
       "expo-router",
       "expo-apple-authentication",
       [
+        "expo-build-properties",
+        {
+          "ios": {
+            "googleMobileAdsAppId": "ca-app-pub-7157702052156983~5011606956"
+          }
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

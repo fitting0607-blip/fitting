@@ -5,6 +5,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AdEventType,
+  RewardedAd,
+  RewardedAdEventType,
+  mobileAds,
+} from 'react-native-google-mobile-ads';
+import {
   ActivityIndicator,
   Alert,
   Dimensions,
@@ -32,6 +38,7 @@ const MAIN = '#6C47FF';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_RATIO = 240 / 670;
 const BANNER_WRAP_PADDING_BOTTOM = 14;
+const REWARDED_AD_UNIT_ID = 'ca-app-pub-7157702052156983/6731882730';
 
 type Banner = {
   id: string;
@@ -106,6 +113,12 @@ export default function RewardScreen() {
       scheduleNextBanner();
     }, 3000);
   }, [banners.length, clearBannerTimer, currentBannerIndex]);
+
+  useEffect(() => {
+    void mobileAds().initialize().catch(() => {
+      // ignore: ad SDK init failure is handled on ad load/show
+    });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -396,15 +409,82 @@ export default function RewardScreen() {
     setAdBusy(true);
     try {
       const { startISO, endISO } = getTodayRangeISO();
-      const { count: cnt, error: cErr } = await supabase
+      const { count: beforeCnt, error: beforeErr } = await supabase
         .from('point_logs')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('reason', 'ad_watch')
         .gte('created_at', startISO)
         .lt('created_at', endISO);
-      if (cErr) throw cErr;
-      if ((cnt ?? 0) >= 4) {
+      if (beforeErr) throw beforeErr;
+      if ((beforeCnt ?? 0) >= 4) {
+        setAdWatchToday(4);
+        Alert.alert('안내', '오늘 광고 시청 보상은 모두 받았어요.');
+        return;
+      }
+
+      const rewarded = RewardedAd.createForAdRequest(REWARDED_AD_UNIT_ID, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+
+      const earned = await new Promise<boolean>((resolve, reject) => {
+        let wasRewardEarned = false;
+        let settled = false;
+
+        const unsubscribeLoaded = rewarded.addAdEventListener(AdEventType.LOADED, () => {
+          rewarded.show().catch((e) => {
+            if (settled) return;
+            settled = true;
+            clear();
+            reject(e);
+          });
+        });
+
+        const unsubscribeEarned = rewarded.addAdEventListener(
+          RewardedAdEventType.EARNED_REWARD,
+          () => {
+            wasRewardEarned = true;
+          }
+        );
+
+        const unsubscribeClosed = rewarded.addAdEventListener(AdEventType.CLOSED, () => {
+          if (settled) return;
+          settled = true;
+          clear();
+          resolve(wasRewardEarned);
+        });
+
+        const unsubscribeError = rewarded.addAdEventListener(AdEventType.ERROR, (error) => {
+          if (settled) return;
+          settled = true;
+          clear();
+          reject(error);
+        });
+
+        const clear = () => {
+          unsubscribeLoaded();
+          unsubscribeEarned();
+          unsubscribeClosed();
+          unsubscribeError();
+        };
+
+        rewarded.load();
+      });
+
+      if (!earned) {
+        Alert.alert('시청 미완료', '광고 시청을 완료해야 보상을 받을 수 있어요.');
+        return;
+      }
+
+      const { count: afterCnt, error: afterErr } = await supabase
+        .from('point_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('reason', 'ad_watch')
+        .gte('created_at', startISO)
+        .lt('created_at', endISO);
+      if (afterErr) throw afterErr;
+      if ((afterCnt ?? 0) >= 4) {
         setAdWatchToday(4);
         Alert.alert('안내', '오늘 광고 시청 보상은 모두 받았어요.');
         return;
@@ -416,8 +496,7 @@ export default function RewardScreen() {
         .eq('id', userId)
         .maybeSingle();
       if (meError) throw meError;
-      const cur =
-        typeof (me as { points?: number } | null)?.points === 'number' ? (me as any).points : 0;
+      const cur = typeof (me as { points?: number } | null)?.points === 'number' ? (me as any).points : 0;
 
       const { error: upErr } = await supabase.from('users').update({ points: cur + 10 }).eq('id', userId);
       if (upErr) throw upErr;
@@ -430,10 +509,10 @@ export default function RewardScreen() {
       if (logErr) throw logErr;
 
       setPoints(cur + 10);
-      setAdWatchToday((n) => n + 1);
-      Alert.alert('적립 완료', '10포인트가 적립됐어요.');
+      setAdWatchToday((n) => Math.min(4, n + 1));
+      Alert.alert('적립 완료', '광고 시청 완료! 10포인트가 적립됐어요.');
     } catch (e: any) {
-      Alert.alert('처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+      Alert.alert('광고 로드 실패', e?.message ?? '광고를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
     } finally {
       setAdBusy(false);
     }
