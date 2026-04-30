@@ -44,7 +44,6 @@ export default function PostCreateScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = imageAsset != null && !submitting;
-  const canGoNext = imageAsset != null;
 
   const pickImages = useCallback(async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -165,7 +164,7 @@ export default function PostCreateScreen() {
     }
   }, [imageAsset, canSubmit, content, feedType, imageTransform, router]);
 
-  const nextTextStyle = useMemo(
+  const doneTextStyle = useMemo(
     () => [styles.nextText, canSubmit ? styles.nextTextActive : styles.nextTextDisabled],
     [canSubmit]
   );
@@ -195,9 +194,9 @@ export default function PostCreateScreen() {
             hitSlop={10}
             style={styles.nextBtn}
             accessibilityRole="button"
-            accessibilityLabel="다음"
+            accessibilityLabel="완료"
           >
-            <Text style={nextTextStyle}>{submitting ? '업로드 중…' : '다음'}</Text>
+            <Text style={doneTextStyle}>{submitting ? '업로드 중…' : '완료'}</Text>
           </Pressable>
         </View>
 
@@ -291,22 +290,6 @@ export default function PostCreateScreen() {
             }}
           />
         ) : null}
-
-        <View style={styles.bottomArea}>
-          <Pressable
-            onPress={uploadAndCreate}
-            disabled={!canSubmit}
-            style={[
-              styles.bottomPrimaryBtn,
-              !canGoNext && styles.bottomPrimaryBtnHidden, // 사진 선택 전엔 버튼 자체를 숨겨 “선택 후 다음” 흐름을 명확히
-              canSubmit ? styles.bottomPrimaryBtnActive : styles.bottomPrimaryBtnDisabled,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="다음 단계로"
-          >
-            <Text style={styles.bottomPrimaryBtnText}>{submitting ? '업로드 중…' : '다음'}</Text>
-          </Pressable>
-        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -363,7 +346,7 @@ function CropModal({
       translate.setValue({ x: clamped.tx, y: clamped.ty });
       start.current = { x: clamped.tx, y: clamped.ty };
     },
-    [imgW, imgH, safeImgH, safeImgW, scale, translate, viewportH, viewportW]
+    [safeImgH, safeImgW, scale, translate, viewportH, viewportW]
   );
 
   const panResponder = React.useMemo(
@@ -519,36 +502,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     gap: 14,
-  },
-
-  bottomArea: {
-    marginTop: 'auto',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    backgroundColor: '#FFFFFF',
-  },
-  bottomPrimaryBtn: {
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bottomPrimaryBtnHidden: {
-    opacity: 0,
-  },
-  bottomPrimaryBtnActive: {
-    backgroundColor: MAIN,
-  },
-  bottomPrimaryBtnDisabled: {
-    backgroundColor: '#E5E7EB',
-  },
-  bottomPrimaryBtnText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
   },
 
   imageRow: {

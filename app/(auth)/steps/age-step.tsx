@@ -40,6 +40,7 @@ export function AgeStep({
   onLoadingChange: (v: boolean) => void;
 }) {
   const age = draft.age ?? '';
+  const normalizedPhone = (draft.phone ?? '').trim();
 
   const submit = async () => {
     const ageNum = Number(age);
@@ -144,7 +145,7 @@ export function AgeStep({
             provider: normalizedProvider,
             nickname: draft.nickname,
             gender: draft.gender,
-            phone: draft.phone,
+            phone: normalizedPhone.length > 0 ? normalizedPhone : null,
             age: ageNum,
             mbti: draft.mbti,
             sports: draft.sports,

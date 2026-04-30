@@ -31,13 +31,13 @@ export function PhoneStep({
 }) {
   const value = draft.phone ?? '';
   const showError = value.length > 0 && !isValid010Phone(value);
-  const canProceed = isValid010Phone(value);
+  const canProceed = value.length === 0 || isValid010Phone(value);
 
   return (
     <View style={layoutStyles.body}>
       <View style={{ flex: 1 }}>
-        <Text style={layoutStyles.title}>전화번호를 입력해 주세요</Text>
-        <Text style={layoutStyles.label}>휴대폰 번호</Text>
+        <Text style={layoutStyles.title}>전화번호를 입력해 주세요 (선택)</Text>
+        <Text style={layoutStyles.label}>휴대폰 번호 (선택)</Text>
         <TextInput
           value={value}
           onChangeText={(text) => {
