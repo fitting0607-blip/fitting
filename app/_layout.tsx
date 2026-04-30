@@ -23,7 +23,11 @@ export default function RootLayout() {
   useEffect(() => {
     let mounted = true;
 
-    ensureExpoNotificationHandlerInstalled();
+    try {
+      ensureExpoNotificationHandlerInstalled();
+    } catch {
+      // best-effort: never crash app on startup
+    }
 
     supabase.auth
       .getSession()
@@ -51,13 +55,17 @@ export default function RootLayout() {
   useEffect(() => {
     // (best-effort) register push token once we have a session
     if (!hasSession) return;
-    void registerAndSavePushToken();
+    registerAndSavePushToken().catch(() => null);
   }, [hasSession]);
 
   useEffect(() => {
     // handle notification taps
     const detach = attachNotificationResponseHandler((route) => {
-      router.push(route as any);
+      try {
+        router.push(route as any);
+      } catch {
+        // ignore
+      }
     });
     return detach;
   }, [router]);
