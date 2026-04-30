@@ -9,7 +9,7 @@
 ## 완료된 기능
 - 회원가입 멀티스텝 (1~10단계)
 - 회원가입 전화번호 입력 단계 추가 (프로필 사진 단계 바로 전, 010-XXXX-XXXX 자동 하이픈, users.phone 컬럼 저장)
-- Apple 심사 반려 대응: 전화번호 선택사항으로 변경, 사진 라이브러리 권한 문구 수정, 게시물 작성 다음버튼 제거
+- Apple 심사 반려 대응: 전화번호 선택사항, 사진권한 문구, 게시물 다음버튼 제거
 - 이메일 중복 체크 (가입 1단계에서 DB 조회 후 차단)
 - 닉네임 중복 체크 (500ms debounce 실시간 검증, 사용가능/중복 표시)
 - users 테이블 nickname unique constraint 추가
@@ -180,6 +180,7 @@
   - products 테이블 apple_product_id 컬럼 추가 및 매핑 완료
   - 결제 성공 시 matching_tickets 증가, payments/point_logs 기록
   - 결제 실패/취소 처리 포함
+- 피티권 인앱결제 플로우 구현 (매칭권과 동일한 방식)
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

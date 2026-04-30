@@ -21,6 +21,7 @@ const MAIN = '#6C47FF';
 
 type StoreItem = {
   id: string;
+  category: 'ticket' | 'matching_ticket' | 'pt_ticket';
   apple_product_id: string;
   title: string;
   ticket_count: number;
@@ -118,6 +119,7 @@ export default function StoreScreen() {
           .filter((r) => !!r?.id)
           .map((r) => ({
             id: r.id,
+            category,
             apple_product_id: String(r.apple_product_id ?? '').trim(),
             title: r.title ?? (category === 'pt_ticket' ? '피티권' : '매칭권'),
             ticket_count: typeof r.ticket_count === 'number' ? r.ticket_count : 0,
@@ -167,6 +169,7 @@ export default function StoreScreen() {
           .filter((r) => !!r?.id)
           .map((r) => ({
             id: String(r.id),
+            category,
             apple_product_id: String(r.apple_product_id ?? '').trim(),
             title: r.title ?? '매칭권',
             ticket_count: typeof r.ticket_count === 'number' ? r.ticket_count : 0,
@@ -293,9 +296,42 @@ export default function StoreScreen() {
     [tab, purchasingSku, ensureIap]
   );
 
-  const buyPt = useCallback(() => {
-    Alert.alert('결제 기능은 준비 중입니다.');
-  }, []);
+  const onBuyPtTicket = useCallback(
+    async (item: StoreItem) => {
+      if (tab !== 'pt') return;
+      if (!myPtEligible) {
+        Alert.alert('구매 불가', '승인된 트레이너만 구매 가능합니다.');
+        return;
+      }
+      if (Platform.OS !== 'ios') {
+        Alert.alert('안내', '현재 iOS에서만 인앱결제를 지원합니다.');
+        return;
+      }
+      const sku = item.apple_product_id?.trim();
+      if (!sku) {
+        Alert.alert('구매 불가', '상품 정보가 올바르지 않습니다.');
+        return;
+      }
+      if (purchasingSku) return;
+
+      const ok = await ensureIap();
+      if (!ok) {
+        Alert.alert('결제 준비 실패', '인앱결제 초기화에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+
+      setPurchasingSku(sku);
+      try {
+        // SKU 유효성 확인(스토어에 등록되지 않은 SKU면 여기서 실패 가능)
+        await InAppPurchases.getProductsAsync([sku]);
+        await InAppPurchases.purchaseItemAsync(sku);
+      } catch (e: any) {
+        Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+        setPurchasingSku(null);
+      }
+    },
+    [tab, myPtEligible, purchasingSku, ensureIap]
+  );
 
   const formatKRW = useCallback((value: number) => {
     const safe = Number.isFinite(value) ? value : 0;
@@ -395,48 +431,84 @@ export default function StoreScreen() {
           if (authError) throw authError;
           if (!user?.id) throw new Error('로그인이 필요합니다.');
 
-          const { data: me, error: meError } = await supabase
-            .from('users')
-            .select('points,matching_tickets')
-            .eq('id', user.id)
-            .maybeSingle();
-          if (meError) throw meError;
-          const curTickets = typeof (me as any)?.matching_tickets === 'number' ? (me as any).matching_tickets : 0;
-          const curPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
+          const category = item?.category ?? null;
+          if (category === 'pt_ticket') {
+            // payments 저장
+            await supabase.from('payments').insert({
+              user_id: user.id,
+              product_id: item?.id ?? null,
+              product_title: item?.title ?? sku,
+              amount: typeof item?.price === 'number' ? item.price : null,
+              status: 'succeeded',
+            });
 
-          const addTickets = Math.max(0, item?.ticket_count ?? 0);
-          const addPoints = Math.max(0, item?.bonus_points ?? 0);
+            // 트레이너 결제완료 처리: 가장 최신 프로필을 결제완료로 업데이트
+            const { data: latestProfile, error: profErr } = await supabase
+              .from('trainer_profiles')
+              .select('id')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (profErr) throw profErr;
+            const profileId = (latestProfile as any)?.id;
+            if (!profileId) throw new Error('트레이너 신청 정보를 찾을 수 없습니다.');
 
-          const { error: upErr } = await supabase
-            .from('users')
-            .update({
-              matching_tickets: curTickets + addTickets,
-              ...(addPoints > 0 ? { points: curPoints + addPoints } : {}),
-            })
-            .eq('id', user.id);
-          if (upErr) throw upErr;
+            const { error: upErr } = await supabase
+              .from('trainer_profiles')
+              .update({ is_approved: true })
+              .eq('id', profileId);
+            if (upErr) throw upErr;
 
-          // point_logs 기록(요구사항)
-          await supabase.from('point_logs').insert({
-            user_id: user.id,
-            amount: addPoints > 0 ? addPoints : 0,
-            reason: addPoints > 0 ? 'ticket_purchase_bonus' : 'ticket_purchase',
-          });
+            await InAppPurchases.finishTransactionAsync(purchase, false);
 
-          // payments 저장(요구사항)
-          await supabase.from('payments').insert({
-            user_id: user.id,
-            product_id: item?.id ?? null,
-            product_title: item?.title ?? sku,
-            amount: typeof item?.price === 'number' ? item.price : null,
-            status: 'succeeded',
-          });
+            void loadMyPt();
+            Alert.alert('결제 완료', '피티권 결제가 완료됐어요.');
+          } else {
+            const { data: me, error: meError } = await supabase
+              .from('users')
+              .select('points,matching_tickets')
+              .eq('id', user.id)
+              .maybeSingle();
+            if (meError) throw meError;
+            const curTickets =
+              typeof (me as any)?.matching_tickets === 'number' ? (me as any).matching_tickets : 0;
+            const curPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
 
-          await InAppPurchases.finishTransactionAsync(purchase, false);
+            const addTickets = Math.max(0, item?.ticket_count ?? 0);
+            const addPoints = Math.max(0, item?.bonus_points ?? 0);
 
-          setPoints(curPoints + addPoints);
-          setMatchingTickets(curTickets + addTickets);
-          Alert.alert('결제 완료', '매칭권이 지급됐어요.');
+            const { error: upErr } = await supabase
+              .from('users')
+              .update({
+                matching_tickets: curTickets + addTickets,
+                ...(addPoints > 0 ? { points: curPoints + addPoints } : {}),
+              })
+              .eq('id', user.id);
+            if (upErr) throw upErr;
+
+            // point_logs 기록(요구사항)
+            await supabase.from('point_logs').insert({
+              user_id: user.id,
+              amount: addPoints > 0 ? addPoints : 0,
+              reason: addPoints > 0 ? 'ticket_purchase_bonus' : 'ticket_purchase',
+            });
+
+            // payments 저장(요구사항)
+            await supabase.from('payments').insert({
+              user_id: user.id,
+              product_id: item?.id ?? null,
+              product_title: item?.title ?? sku,
+              amount: typeof item?.price === 'number' ? item.price : null,
+              status: 'succeeded',
+            });
+
+            await InAppPurchases.finishTransactionAsync(purchase, false);
+
+            setPoints(curPoints + addPoints);
+            setMatchingTickets(curTickets + addTickets);
+            Alert.alert('결제 완료', '매칭권이 지급됐어요.');
+          }
         } catch (e: any) {
           Alert.alert('결제 처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
         } finally {
@@ -459,7 +531,7 @@ export default function StoreScreen() {
       }
       void InAppPurchases.disconnectAsync();
     };
-  }, [ensureIap, products]);
+  }, [ensureIap, products, purchasingSku, loadMyPt]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -594,15 +666,19 @@ export default function StoreScreen() {
               </View>
               {tab === 'pt' ? (
                 <Pressable
-                  onPress={buyPt}
-                  disabled={!myPtEligible}
+                  onPress={() => void onBuyPtTicket(item)}
+                  disabled={!myPtEligible || !!purchasingSku}
                   style={[styles.buyBtn, !myPtEligible && styles.buyBtnDisabled]}
                   accessibilityRole="button"
                   accessibilityLabel="구매"
                 >
-                  <Text style={[styles.buyBtnText, !myPtEligible && styles.buyBtnTextDisabled]}>
-                    구매
-                  </Text>
+                  {purchasingSku && purchasingSku === item.apple_product_id.trim() ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={[styles.buyBtnText, !myPtEligible && styles.buyBtnTextDisabled]}>
+                      구매
+                    </Text>
+                  )}
                 </Pressable>
               ) : (
                 purchasingSku && purchasingSku === item.apple_product_id.trim() ? (
