@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
+import MobileAds from 'react-native-google-mobile-ads';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { attachNotificationResponseHandler, ensureExpoNotificationHandlerInstalled, registerAndSavePushToken } from '@/app/utils/push';
@@ -22,6 +23,12 @@ export default function RootLayout() {
 
   useEffect(() => {
     let mounted = true;
+
+    // Ensure Google Mobile Ads SDK is initialized on app start.
+    // This prevents startup crash: GADApplicationVerifyPublisherInitializedCorrectly
+    MobileAds()
+      .initialize()
+      .catch(() => null);
 
     try {
       ensureExpoNotificationHandlerInstalled();
