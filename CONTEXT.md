@@ -178,6 +178,11 @@
   - app.json plugins에 react-native-google-mobile-ads 플러그인 추가
   - iosAppId, androidAppId 모두 ca-app-pub-7157702052156983~5011606956 으로 설정
   - 이전 expo-build-properties의 googleMobileAdsAppId는 유지
+- AdMob 보상형 광고 크래시 방지 처리
+  - app/(tabs)/reward.tsx: mobileAds 초기화 try-catch 추가
+  - app/(tabs)/reward.tsx: RewardedAd 생성/리스너/load/show 전체 try-catch로 감싸기
+  - 광고 로드 실패 시 "광고를 불러올 수 없습니다" 알림 표시
+  - 크래시 없이 앱 계속 동작하도록 처리
 - 상점 화면 (홈 상단 버튼, 리워드 탭 매칭권 구매 버튼으로 진입)
 - 상점 피티권 탭 추가 (승인된 트레이너만 구매 가능)
 - 상점 상품 카드 원가 취소선 + 할인가 + 할인율 뱃지 표시

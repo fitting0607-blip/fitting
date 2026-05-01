@@ -115,9 +115,15 @@ export default function RewardScreen() {
   }, [banners.length, clearBannerTimer, currentBannerIndex]);
 
   useEffect(() => {
-    void mobileAds().initialize().catch(() => {
-      // ignore: ad SDK init failure is handled on ad load/show
-    });
+    try {
+      void mobileAds()
+        .initialize()
+        .catch((e) => {
+          console.error('[mobileAds] initialize failed', e);
+        });
+    } catch (e) {
+      console.error('[mobileAds] initialize threw', e);
+    }
   }, []);
 
   useEffect(() => {
@@ -423,53 +429,95 @@ export default function RewardScreen() {
         return;
       }
 
-      const rewarded = RewardedAd.createForAdRequest(REWARDED_AD_UNIT_ID, {
-        requestNonPersonalizedAdsOnly: true,
-      });
+      let rewarded: RewardedAd;
+      try {
+        rewarded = RewardedAd.createForAdRequest(REWARDED_AD_UNIT_ID, {
+          requestNonPersonalizedAdsOnly: true,
+        });
+      } catch (e) {
+        console.error('[RewardedAd] createForAdRequest failed', e);
+        Alert.alert('안내', '광고를 불러올 수 없습니다');
+        return;
+      }
 
-      const earned = await new Promise<boolean>((resolve, reject) => {
-        let wasRewardEarned = false;
-        let settled = false;
+      const unsubscribes: Array<() => void> = [];
+      const runUnsubs = () => {
+        for (const u of unsubscribes) {
+          try {
+            u();
+          } catch (err) {
+            console.error('[RewardedAd] listener unsubscribe failed', err);
+          }
+        }
+        unsubscribes.length = 0;
+      };
 
-        const unsubscribeLoaded = rewarded.addAdEventListener(AdEventType.LOADED, () => {
-          rewarded.show().catch((e) => {
+      let earned: boolean;
+      try {
+        earned = await new Promise<boolean>((resolve, reject) => {
+          let wasRewardEarned = false;
+          let settled = false;
+
+          const settle = (fn: () => void) => {
             if (settled) return;
             settled = true;
-            clear();
+            runUnsubs();
+            fn();
+          };
+
+          try {
+            unsubscribes.push(
+              rewarded.addAdEventListener(AdEventType.LOADED, () => {
+                try {
+                  void rewarded.show().catch((e) => {
+                    console.error('[RewardedAd] show() failed', e);
+                    settle(() => reject(e));
+                  });
+                } catch (e) {
+                  console.error('[RewardedAd] show() threw', e);
+                  settle(() => reject(e));
+                }
+              })
+            );
+
+            unsubscribes.push(
+              rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+                wasRewardEarned = true;
+              })
+            );
+
+            unsubscribes.push(
+              rewarded.addAdEventListener(AdEventType.CLOSED, () => {
+                settle(() => resolve(wasRewardEarned));
+              })
+            );
+
+            unsubscribes.push(
+              rewarded.addAdEventListener(AdEventType.ERROR, (error) => {
+                console.error('[RewardedAd] AdEventType.ERROR', error);
+                settle(() => reject(error));
+              })
+            );
+          } catch (e) {
+            console.error('[RewardedAd] addAdEventListener failed', e);
+            runUnsubs();
             reject(e);
-          });
-        });
-
-        const unsubscribeEarned = rewarded.addAdEventListener(
-          RewardedAdEventType.EARNED_REWARD,
-          () => {
-            wasRewardEarned = true;
+            return;
           }
-        );
 
-        const unsubscribeClosed = rewarded.addAdEventListener(AdEventType.CLOSED, () => {
-          if (settled) return;
-          settled = true;
-          clear();
-          resolve(wasRewardEarned);
+          try {
+            rewarded.load();
+          } catch (e) {
+            console.error('[RewardedAd] load() threw', e);
+            runUnsubs();
+            reject(e);
+          }
         });
-
-        const unsubscribeError = rewarded.addAdEventListener(AdEventType.ERROR, (error) => {
-          if (settled) return;
-          settled = true;
-          clear();
-          reject(error);
-        });
-
-        const clear = () => {
-          unsubscribeLoaded();
-          unsubscribeEarned();
-          unsubscribeClosed();
-          unsubscribeError();
-        };
-
-        rewarded.load();
-      });
+      } catch (e) {
+        console.error('[RewardedAd] ad flow failed', e);
+        Alert.alert('안내', '광고를 불러올 수 없습니다');
+        return;
+      }
 
       if (!earned) {
         Alert.alert('시청 미완료', '광고 시청을 완료해야 보상을 받을 수 있어요.');
@@ -512,7 +560,8 @@ export default function RewardScreen() {
       setAdWatchToday((n) => Math.min(4, n + 1));
       Alert.alert('적립 완료', '광고 시청 완료! 10포인트가 적립됐어요.');
     } catch (e: any) {
-      Alert.alert('광고 로드 실패', e?.message ?? '광고를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+      console.error('[onAdWatch] unexpected error', e);
+      Alert.alert('처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
     } finally {
       setAdBusy(false);
     }
