@@ -623,32 +623,38 @@ export default function HomeScreen() {
           style={styles.header}
           onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
         >
-          <Pressable
-            onPress={() => router.push('/store')}
-            hitSlop={10}
-            style={styles.headerStoreBtn}
-            accessibilityRole="button"
-            accessibilityLabel="상점"
-          >
-            <Feather name="shopping-bag" size={20} color="#111111" />
-            <Text style={styles.headerStoreLabel}>상점</Text>
-          </Pressable>
+          <View style={[styles.headerSide, styles.headerSideLeft]}>
+            <Pressable
+              onPress={() => router.push('/store')}
+              hitSlop={10}
+              style={styles.headerStoreBtn}
+              accessibilityRole="button"
+              accessibilityLabel="상점"
+            >
+              <Feather name="shopping-bag" size={20} color="#111111" />
+              <Text style={styles.headerStoreLabel}>상점</Text>
+            </Pressable>
+          </View>
 
-          <Image
-            source={require('../../assets/images/logo.png')}
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
+          <View style={styles.headerLogoWrap}>
+            <Image
+              source={require('../../assets/images/logo.png')}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+          </View>
 
-          <Pressable
-            onPress={() => router.push('/notifications')}
-            hitSlop={10}
-            style={styles.headerIconBtn}
-            accessibilityRole="button"
-            accessibilityLabel="알림"
-          >
-            <Feather name="bell" size={22} color="#111111" />
-          </Pressable>
+          <View style={[styles.headerSide, styles.headerSideRight]}>
+            <Pressable
+              onPress={() => router.push('/notifications')}
+              hitSlop={10}
+              style={styles.headerIconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="알림"
+            >
+              <Feather name="bell" size={22} color="#111111" />
+            </Pressable>
+          </View>
         </View>
 
         <View
@@ -814,7 +820,22 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+  },
+  headerSide: {
+    width: 60,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  headerSideLeft: {
+    alignItems: 'flex-start',
+  },
+  headerSideRight: {
+    alignItems: 'flex-end',
+  },
+  headerLogoWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerIconBtn: {
     width: 40,
@@ -827,8 +848,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingVertical: 8,
-    paddingRight: 4,
-    minHeight: 40,
   },
   headerStoreLabel: {
     fontSize: 15,
@@ -836,8 +855,8 @@ const styles = StyleSheet.create({
     color: '#111111',
   },
   headerLogo: {
-    width: 100,
-    height: 36,
+    width: 130,
+    height: 47,
   },
 
   feedBar: {

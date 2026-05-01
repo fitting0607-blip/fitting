@@ -470,8 +470,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   logoImage: {
-    width: 160,
-    height: 60,
+    width: 200,
+    height: 75,
     alignSelf: 'center',
     marginBottom: 28,
   },

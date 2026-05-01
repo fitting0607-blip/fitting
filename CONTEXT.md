@@ -15,6 +15,10 @@
 - users 테이블 nickname unique constraint 추가
 - 로그인/로그아웃
 - 로고 이미지 적용 (로그인 화면, 홈 헤더) — assets/images/logo.png 사용
+- 홈 헤더 로고 중앙 정렬 및 크기 조정
+  - index.tsx: 헤더 좌우 width:60 고정, 로고 중앙 배치
+  - 로고 크기 130×47로 확대
+  - login.tsx: 로고 크기 200×75로 확대
 - 카카오 로그인 (Supabase kakao provider 연동, 리다이렉트 URI 설정 완료)
 - 카카오 로그인 redirectTo URL 수정
   - fitting://auth/callback → https://umblarikptpbjqliixqc.supabase.co/auth/v1/callback 으로 변경
