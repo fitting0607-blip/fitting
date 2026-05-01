@@ -174,6 +174,10 @@
 - AdMob 초기화 크래시 수정
   - app.json: android.googleMobileAdsAppId 추가 (ca-app-pub-7157702052156983~5011606956)
   - app/_layout.tsx: MobileAds().initialize() 앱 시작 시 호출 추가 (.catch로 크래시 방지)
+- AdMob 플러그인 설정 추가로 크래시 수정
+  - app.json plugins에 react-native-google-mobile-ads 플러그인 추가
+  - iosAppId, androidAppId 모두 ca-app-pub-7157702052156983~5011606956 으로 설정
+  - 이전 expo-build-properties의 googleMobileAdsAppId는 유지
 - 상점 화면 (홈 상단 버튼, 리워드 탭 매칭권 구매 버튼으로 진입)
 - 상점 피티권 탭 추가 (승인된 트레이너만 구매 가능)
 - 상점 상품 카드 원가 취소선 + 할인가 + 할인율 뱃지 표시

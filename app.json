@@ -45,6 +45,13 @@
         }
       ],
       [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7157702052156983~5011606956",
+          "iosAppId": "ca-app-pub-7157702052156983~5011606956"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
