@@ -403,7 +403,7 @@ export default function StoreScreen() {
     let mounted = true;
 
     const TICKET_QTY_BY_PRODUCT_ID: Record<string, number> = {
-      'com.hywoo.fitting.ticket_1': 1,
+      'com.hywoo.fitting.ticket_3': 3,
       'com.hywoo.fitting.ticket_5': 5,
       'com.hywoo.fitting.ticket_10': 10,
       'com.hywoo.fitting.ticket_30': 30,
@@ -413,6 +413,31 @@ export default function StoreScreen() {
     const sub = InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
       if (!mounted) return;
       console.log('IAP listener called');
+      Alert.alert('IAP listener called');
+
+      const insertPayment = async (
+        payload: {
+          user_id: string;
+          product_id: string | null;
+          product_title: string | null;
+          amount: number | null;
+          status: string;
+          transaction_id: string | null;
+        },
+        debug?: { state?: unknown }
+      ) => {
+        if (!payload.transaction_id) {
+          Alert.alert('transactionId is null', `state=${String(debug?.state ?? '')}`);
+        }
+        console.log('[payments] insert payload', payload);
+        const { error } = await supabase.from('payments').insert(payload);
+        if (error) {
+          Alert.alert(JSON.stringify(error));
+          return { ok: false as const, error };
+        }
+        Alert.alert('payment insert success');
+        return { ok: true as const, error: null };
+      };
 
       // cancelled
       if (responseCode === (InAppPurchases as any).IAPResponseCode?.USER_CANCELED) {
@@ -424,13 +449,14 @@ export default function StoreScreen() {
             const skuRef = (purchasingSku ?? '').trim();
             const item =
               products.find((p) => p.apple_product_id.trim() === skuRef) ?? null;
-            await supabase.from('payments').insert({
+            await insertPayment({
               user_id: user.id,
               product_id: item?.id ?? null,
               product_title: (item?.title ?? skuRef) || 'IAP',
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'cancelled',
-            });
+              transaction_id: null,
+            }, { state: 'USER_CANCELED' });
           }
         } catch {
           // ignore
@@ -452,13 +478,14 @@ export default function StoreScreen() {
             const skuRef = (purchasingSku ?? '').trim();
             const item =
               products.find((p) => p.apple_product_id.trim() === skuRef) ?? null;
-            await supabase.from('payments').insert({
+            await insertPayment({
               user_id: user.id,
               product_id: item?.id ?? null,
               product_title: (item?.title ?? skuRef) || 'IAP',
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'failed',
-            });
+              transaction_id: null,
+            }, { state: `IAPResponseCode=${String(responseCode)}` });
           }
         } catch {
           // ignore
@@ -477,13 +504,6 @@ export default function StoreScreen() {
       for (const purchase of purchases) {
         try {
           const state = (purchase as any)?.purchaseState;
-          const purchased =
-            state === (InAppPurchases as any).IAPPurchaseState?.PURCHASED || state === 1;
-          if (!purchased) {
-            setPurchasingSku(null);
-            continue;
-          }
-
           const sku = String((purchase as any)?.productId ?? '').trim();
           const transactionId = String(
             (purchase as any)?.transactionId ??
@@ -493,6 +513,34 @@ export default function StoreScreen() {
           ).trim();
           console.log('[IAP] purchase', { productId: sku, transactionId });
           console.log('purchase.productId', sku, 'purchase.transactionId', transactionId);
+          Alert.alert('IAP purchase', `state=${String(state)}\nproductId=${sku}\ntransactionId=${transactionId}`);
+
+          const purchaseState = (InAppPurchases as any).IAPPurchaseState;
+          const purchased =
+            state === purchaseState?.PURCHASED ||
+            state === purchaseState?.RESTORED ||
+            state === 0 ||
+            state === 1 ||
+            state == null;
+
+          // productId가 매핑된 상품일 때만 지급 처리
+          const isKnownProductId =
+            sku in TICKET_QTY_BY_PRODUCT_ID ||
+            sku === 'com.hywoo.fitting.ticket_unlimited' ||
+            sku === 'com.hywoo.fitting.trainer_30';
+
+          if (!sku || !isKnownProductId) {
+            console.log('[IAP] unknown/empty productId, skip grant', { sku, state });
+            setPurchasingSku(null);
+            continue;
+          }
+
+          // pending transaction도 처리되도록 purchased 판별을 완화
+          if (!purchased) {
+            console.log('[IAP] not purchased/restored, skip grant', { sku, state });
+            setPurchasingSku(null);
+            continue;
+          }
 
           const item =
             products.find((p) => p.apple_product_id.trim() === sku) ??
@@ -544,18 +592,18 @@ export default function StoreScreen() {
 
           // 1) payments INSERT
           {
-            const payload: any = {
+            const payload = {
               user_id: user.id,
               product_id: item?.id ?? null,
               product_title: item?.title ?? sku,
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'succeeded',
+              transaction_id: transactionId || null,
             };
-            if (transactionId) payload.transaction_id = transactionId;
-            const { error: payErr } = await supabase.from('payments').insert(payload);
-            if (payErr) {
+            const res = await insertPayment(payload, { state });
+            if (!res.ok) {
               console.log('payment insert error');
-              console.error(payErr);
+              console.error(res.error);
               setPurchasingSku(null);
               continue;
             }

@@ -233,7 +233,8 @@
   - ensureIap() connectPromise 관리 (pending 방지)
   - 결제 성공 후 item 없을 때 DB 재조회로 지급 로직 스킵 방지
   - 구매 흐름: ensureIap → getProductsAsync → purchaseItemAsync 복구
-- IAP DB 지급 로직 수정 (expo-in-app-purchases 기준, 중복방지 포함, payments.transaction_id 컬럼 추가)
+- IAP DB 지급 로직 수정 (expo-in-app-purchases 기준, 중복방지 포함, payments.transaction_id 컬럼 추가, payments insert 디버그 Alert/로그 추가, purchaseState(0/1/nullish) 대응)
+- IAP 전체 수정 완료 - purchaseState(0/1/null) 대응, ticket_3 매핑 추가, payments RLS INSERT 정책 추가, transaction_id 컬럼 추가, payments payload 컬럼 정합성 수정
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
