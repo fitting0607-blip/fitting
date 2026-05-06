@@ -402,8 +402,17 @@ export default function StoreScreen() {
     if (Platform.OS !== 'ios') return;
     let mounted = true;
 
+    const TICKET_QTY_BY_PRODUCT_ID: Record<string, number> = {
+      'com.hywoo.fitting.ticket_1': 1,
+      'com.hywoo.fitting.ticket_5': 5,
+      'com.hywoo.fitting.ticket_10': 10,
+      'com.hywoo.fitting.ticket_30': 30,
+      'com.hywoo.fitting.ticket_50': 50,
+    };
+
     const sub = InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
       if (!mounted) return;
+      console.log('IAP listener called');
 
       // cancelled
       if (responseCode === (InAppPurchases as any).IAPResponseCode?.USER_CANCELED) {
@@ -433,8 +442,7 @@ export default function StoreScreen() {
 
       // generic error
       if (
-        responseCode !== (InAppPurchases as any).IAPResponseCode?.OK &&
-        responseCode !== 0 // 일부 환경에서 OK=0
+        responseCode !== (InAppPurchases as any).IAPResponseCode?.OK
       ) {
         try {
           const {
@@ -477,6 +485,15 @@ export default function StoreScreen() {
           }
 
           const sku = String((purchase as any)?.productId ?? '').trim();
+          const transactionId = String(
+            (purchase as any)?.transactionId ??
+              (purchase as any)?.transactionID ??
+              (purchase as any)?.orderId ??
+              ''
+          ).trim();
+          console.log('[IAP] purchase', { productId: sku, transactionId });
+          console.log('purchase.productId', sku, 'purchase.transactionId', transactionId);
+
           const item =
             products.find((p) => p.apple_product_id.trim() === sku) ??
             products.find((p) => p.id === sku) ??
@@ -499,17 +516,54 @@ export default function StoreScreen() {
           }
 
           const category = item.category;
-          if (category === 'pt_ticket') {
-            // payments 저장
-            await supabase.from('payments').insert({
+          if (sku === 'com.hywoo.fitting.ticket_unlimited') {
+            // premium (별도 처리)
+            console.log('[IAP] premium product detected, handled separately', sku);
+            console.error('[IAP] premium grant not implemented yet');
+            setPurchasingSku(null);
+            continue;
+          }
+
+          // 중복 transactionId 방지: payments에 동일 transaction_id가 있으면 지급 스킵
+          if (transactionId) {
+            const { data: existing, error: dupErr } = await supabase
+              .from('payments')
+              .select('id')
+              // @ts-ignore: DB 컬럼이 실제로 존재해야 함 (transaction_id)
+              .eq('transaction_id', transactionId)
+              .limit(1);
+            if (dupErr) throw dupErr;
+            if ((existing?.length ?? 0) > 0) {
+              console.log('[IAP] duplicate transactionId, skip grant', transactionId);
+              console.log('finishTransaction called');
+              await InAppPurchases.finishTransactionAsync(purchase, false);
+              setPurchasingSku(null);
+              continue;
+            }
+          }
+
+          // 1) payments INSERT
+          {
+            const payload: any = {
               user_id: user.id,
               product_id: item?.id ?? null,
               product_title: item?.title ?? sku,
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'succeeded',
-            });
+            };
+            if (transactionId) payload.transaction_id = transactionId;
+            const { error: payErr } = await supabase.from('payments').insert(payload);
+            if (payErr) {
+              console.log('payment insert error');
+              console.error(payErr);
+              setPurchasingSku(null);
+              continue;
+            }
+            console.log('payment insert success');
+          }
 
-            // 트레이너 결제완료 처리: 가장 최신 프로필을 결제완료로 업데이트
+          if (sku === 'com.hywoo.fitting.trainer_30' || category === 'pt_ticket') {
+            // 피티권(별도 처리): trainer_profiles 최신 1건 is_approved=true
             const { data: latestProfile, error: profErr } = await supabase
               .from('trainer_profiles')
               .select('id')
@@ -525,62 +579,80 @@ export default function StoreScreen() {
               .from('trainer_profiles')
               .update({ is_approved: true })
               .eq('id', profileId);
-            if (upErr) throw upErr;
+            if (upErr) {
+              console.log('user update error');
+              console.error(upErr);
+              setPurchasingSku(null);
+              continue;
+            }
+            console.log('user update success');
 
+            console.log('finishTransaction called');
             await InAppPurchases.finishTransactionAsync(purchase, false);
 
             void loadMyPt();
             setPurchasingSku(null);
             Alert.alert('결제 완료', '피티권 결제가 완료됐어요.');
-          } else {
-            const { data: me, error: meError } = await supabase
-              .from('users')
-              .select('points,matching_tickets')
-              .eq('id', user.id)
-              .maybeSingle();
-            if (meError) throw meError;
-            const curTickets =
-              typeof (me as any)?.matching_tickets === 'number' ? (me as any).matching_tickets : 0;
-            const curPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
-
-            const addTickets = Math.max(0, item?.ticket_count ?? 0);
-            const addPoints = Math.max(0, item?.bonus_points ?? 0);
-
-            const { error: upErr } = await supabase
-              .from('users')
-              .update({
-                matching_tickets: curTickets + addTickets,
-                ...(addPoints > 0 ? { points: curPoints + addPoints } : {}),
-              })
-              .eq('id', user.id);
-            if (upErr) throw upErr;
-
-            if (addPoints > 0) {
-              await supabase.from('point_logs').insert({
-                user_id: user.id,
-                amount: addPoints,
-                reason: 'ticket_purchase_bonus',
-              });
-            }
-
-            // payments 저장(요구사항)
-            await supabase.from('payments').insert({
-              user_id: user.id,
-              product_id: item?.id ?? null,
-              product_title: item?.title ?? sku,
-              amount: typeof item?.price === 'number' ? item.price : null,
-              status: 'succeeded',
-            });
-
-            await InAppPurchases.finishTransactionAsync(purchase, false);
-
-            setPoints(curPoints + addPoints);
-            setMatchingTickets(curTickets + addTickets);
-            setPurchasingSku(null);
-            Alert.alert('결제 완료', '매칭권이 지급됐어요.');
+            continue;
           }
+
+          // 매칭권: productId별 수량 매핑 우선
+          const addTicketsFromMap = TICKET_QTY_BY_PRODUCT_ID[sku];
+          const addTickets = Math.max(0, typeof addTicketsFromMap === 'number' ? addTicketsFromMap : (item?.ticket_count ?? 0));
+          const addPoints = Math.max(0, item?.bonus_points ?? 0);
+
+          // 2) point_logs INSERT (보너스 포인트가 있을 때만)
+          if (addPoints > 0) {
+            const { error: logErr } = await supabase.from('point_logs').insert({
+              user_id: user.id,
+              amount: addPoints,
+              reason: 'ticket_purchase_bonus',
+            });
+            if (logErr) {
+              console.log('user update error');
+              console.error(logErr);
+              setPurchasingSku(null);
+              continue;
+            }
+          }
+
+          // 3) users.matching_tickets UPDATE (+ bonus points if any)
+          const { data: me, error: meError } = await supabase
+            .from('users')
+            .select('points,matching_tickets')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (meError) throw meError;
+
+          const curTickets =
+            typeof (me as any)?.matching_tickets === 'number' ? (me as any).matching_tickets : 0;
+          const curPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
+
+          const { error: upErr } = await supabase
+            .from('users')
+            .update({
+              matching_tickets: curTickets + addTickets,
+              ...(addPoints > 0 ? { points: curPoints + addPoints } : {}),
+            })
+            .eq('id', user.id);
+          if (upErr) {
+            console.log('user update error');
+            console.error(upErr);
+            setPurchasingSku(null);
+            continue;
+          }
+          console.log('user update success');
+
+          console.log('finishTransaction called');
+          await InAppPurchases.finishTransactionAsync(purchase, false);
+
+          setPoints(curPoints + addPoints);
+          setMatchingTickets(curTickets + addTickets);
+          setPurchasingSku(null);
+          Alert.alert('결제 완료', '매칭권이 지급됐어요.');
         } catch (e: any) {
           setPurchasingSku(null);
+          console.error(e);
           Alert.alert('결제 처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
         }
       }
