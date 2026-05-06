@@ -310,12 +310,13 @@ export default function StoreScreen() {
       }
       if (purchasingSku) return;
       if (!iapReady) {
-        Alert.alert('안내', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
+        Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
         return;
       }
 
       setPurchasingSkuTracked(sku);
       try {
+        await InAppPurchases.getProductsAsync([sku]);
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         setPurchasingSkuTracked(null);
@@ -343,12 +344,13 @@ export default function StoreScreen() {
       }
       if (purchasingSku) return;
       if (!iapReady) {
-        Alert.alert('안내', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
+        Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
         return;
       }
 
       setPurchasingSkuTracked(sku);
       try {
+        await InAppPurchases.getProductsAsync([sku]);
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         setPurchasingSkuTracked(null);
