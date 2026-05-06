@@ -400,6 +400,8 @@ export default function StoreScreen() {
 
   React.useEffect(() => {
     if (Platform.OS !== 'ios') return;
+    // connectAsync 완료(iapReady=true) 이후에만 listener 등록
+    if (!iapReady) return;
     let mounted = true;
 
     const TICKET_QTY_BY_PRODUCT_ID: Record<string, number> = {
@@ -716,7 +718,7 @@ export default function StoreScreen() {
         // ignore
       }
     };
-  }, [products, purchasingSku, loadMyPt]);
+  }, [iapReady, products, purchasingSku, loadMyPt]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
