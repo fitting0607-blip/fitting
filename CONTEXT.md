@@ -215,6 +215,11 @@
 - IAP 구매 플로우 수정
   - 구매 버튼: iapReady 체크 후 getProductsAsync → purchaseItemAsync 순서로 호출
   - ensureIap()는 상점 진입 시 한 번만 호출
+- IAP store.tsx 단순화
+  - 복잡한 ref 제거 (iapConnectPromiseRef, iapReadyRef, purchasingSkuRef)
+  - purchasingSku useState로 단순화
+  - 구매 버튼: ensureIap → getProductsAsync → purchaseItemAsync 순서 유지
+  - disconnectAsync 제거
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
