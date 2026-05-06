@@ -228,6 +228,11 @@
   - 상점 진입 시 전체 SKU getProductsAsync 사전 조회 (iapQueried state)
   - 구매 버튼: iapReady && iapQueried 둘 다 true일 때만 purchaseItemAsync 직접 호출
   - 상품 목록: iapReady && iapQueried 전까지 "결제 준비 중..." 스피너 표시
+- IAP 구매 플로우 최종 수정
+  - 구매 버튼 finally로 로딩 해제 보장
+  - ensureIap() connectPromise 관리 (pending 방지)
+  - 결제 성공 후 item 없을 때 DB 재조회로 지급 로직 스킵 방지
+  - 구매 흐름: ensureIap → getProductsAsync → purchaseItemAsync 복구
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
