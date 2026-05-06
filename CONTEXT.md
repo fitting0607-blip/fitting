@@ -208,6 +208,10 @@
 - store.tsx nullish coalescing 문법 오류 수정
   - item?.title ?? skuRef || 'IAP' → (item?.title ?? skuRef) || 'IAP'
   - 취소 분기, 실패 분기 두 곳 모두 수정
+- IAP 구매 플로우 UX 개선
+  - 상점 진입 시 ensureIap() 미리 호출해서 구매 버튼 클릭 시 즉시 실행
+  - iapReady 전에는 "결제 준비 중..." 표시
+  - 구매 완료 후 스피너 즉시 해제 (Alert 전에 로딩 해제)
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

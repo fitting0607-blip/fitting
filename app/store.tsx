@@ -42,6 +42,8 @@ export default function StoreScreen() {
   const [tab, setTab] = useState<'matching' | 'pt'>('matching');
   const [iapReady, setIapReady] = useState(false);
   const [iapLoading, setIapLoading] = useState(false);
+  const iapReadyRef = useRef(false);
+  const iapConnectPromiseRef = useRef<Promise<boolean> | null>(null);
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
   const purchasingSkuRef = useRef<string | null>(null);
   const setPurchasingSkuTracked = useCallback((sku: string | null) => {
@@ -202,32 +204,43 @@ export default function StoreScreen() {
     }
   }, []);
 
-  const ensureIap = useCallback(async () => {
-    if (Platform.OS !== 'ios') return false;
-    if (iapReady) return true;
-    if (iapLoading) return false;
-    setIapLoading(true);
-    try {
-      const billingCode = await InAppPurchases.getBillingResponseCodeAsync();
-      if (billingCode === IAPResponseCode.OK) {
+  const ensureIap = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS !== 'ios') return true;
+    if (iapReadyRef.current) return true;
+    if (iapConnectPromiseRef.current) return iapConnectPromiseRef.current;
+
+    const p = (async (): Promise<boolean> => {
+      setIapLoading(true);
+      try {
+        const billingCode = await InAppPurchases.getBillingResponseCodeAsync();
+        if (billingCode === IAPResponseCode.OK) {
+          iapReadyRef.current = true;
+          setIapReady(true);
+          return true;
+        }
+        await InAppPurchases.connectAsync();
+        iapReadyRef.current = true;
         setIapReady(true);
         return true;
+      } catch (e: unknown) {
+        const msg = String((e as { message?: string })?.message ?? e ?? '');
+        if (msg.includes('Already connected')) {
+          iapReadyRef.current = true;
+          setIapReady(true);
+          return true;
+        }
+        iapReadyRef.current = false;
+        setIapReady(false);
+        return false;
+      } finally {
+        setIapLoading(false);
+        iapConnectPromiseRef.current = null;
       }
-      await InAppPurchases.connectAsync();
-      setIapReady(true);
-      return true;
-    } catch (e: unknown) {
-      const msg = String((e as { message?: string })?.message ?? e ?? '');
-      if (msg.includes('Already connected')) {
-        setIapReady(true);
-        return true;
-      }
-      setIapReady(false);
-      return false;
-    } finally {
-      setIapLoading(false);
-    }
-  }, [iapReady, iapLoading]);
+    })();
+
+    iapConnectPromiseRef.current = p;
+    return p;
+  }, []);
 
   const loadMyPt = useCallback(async () => {
     setMyPtLoading(true);
@@ -278,6 +291,11 @@ export default function StoreScreen() {
 
   const goBack = useCallback(() => router.back(), [router]);
 
+  React.useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    void ensureIap();
+  }, [ensureIap]);
+
   const onBuyMatchingTicket = useCallback(
     async (item: StoreItem) => {
       if (tab !== 'matching') return;
@@ -291,24 +309,20 @@ export default function StoreScreen() {
         return;
       }
       if (purchasingSku) return;
-
-      const ok = await ensureIap();
-      if (!ok) {
-        Alert.alert('결제 준비 실패', '인앱결제 초기화에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      if (!iapReady) {
+        Alert.alert('안내', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
         return;
       }
 
       setPurchasingSkuTracked(sku);
       try {
-        // SKU 유효성 확인(스토어에 등록되지 않은 SKU면 여기서 실패 가능)
-        await InAppPurchases.getProductsAsync([sku]);
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
-        Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
         setPurchasingSkuTracked(null);
+        Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       }
     },
-    [tab, purchasingSku, ensureIap, setPurchasingSkuTracked]
+    [tab, purchasingSku, iapReady, setPurchasingSkuTracked]
   );
 
   const onBuyPtTicket = useCallback(
@@ -328,24 +342,20 @@ export default function StoreScreen() {
         return;
       }
       if (purchasingSku) return;
-
-      const ok = await ensureIap();
-      if (!ok) {
-        Alert.alert('결제 준비 실패', '인앱결제 초기화에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      if (!iapReady) {
+        Alert.alert('안내', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
         return;
       }
 
       setPurchasingSkuTracked(sku);
       try {
-        // SKU 유효성 확인(스토어에 등록되지 않은 SKU면 여기서 실패 가능)
-        await InAppPurchases.getProductsAsync([sku]);
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
-        Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
         setPurchasingSkuTracked(null);
+        Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       }
     },
-    [tab, myPtEligible, purchasingSku, ensureIap, setPurchasingSkuTracked]
+    [tab, myPtEligible, purchasingSku, iapReady, setPurchasingSkuTracked]
   );
 
   const formatKRW = useCallback((value: number) => {
@@ -359,6 +369,7 @@ export default function StoreScreen() {
 
   const hasAnyProducts = products.length > 0;
   const productsEmpty = useMemo(() => !productsLoading && !hasAnyProducts, [productsLoading, hasAnyProducts]);
+  const showIapProductList = Platform.OS !== 'ios' || iapReady;
 
   React.useEffect(() => {
     if (Platform.OS !== 'ios') return;
@@ -433,7 +444,10 @@ export default function StoreScreen() {
           const state = (purchase as any)?.purchaseState;
           const purchased =
             state === (InAppPurchases as any).IAPPurchaseState?.PURCHASED || state === 1;
-          if (!purchased) continue;
+          if (!purchased) {
+            setPurchasingSkuTracked(null);
+            continue;
+          }
 
           const sku = String((purchase as any)?.productId ?? '').trim();
           const item =
@@ -449,6 +463,7 @@ export default function StoreScreen() {
           if (!user?.id) throw new Error('로그인이 필요합니다.');
 
           if (!item) {
+            setPurchasingSkuTracked(null);
             Alert.alert(
               '안내',
               '상품 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'
@@ -488,6 +503,7 @@ export default function StoreScreen() {
             await InAppPurchases.finishTransactionAsync(purchase, false);
 
             void loadMyPt();
+            setPurchasingSkuTracked(null);
             Alert.alert('결제 완료', '피티권 결제가 완료됐어요.');
           } else {
             const { data: me, error: meError } = await supabase
@@ -533,18 +549,15 @@ export default function StoreScreen() {
 
             setPoints(curPoints + addPoints);
             setMatchingTickets(curTickets + addTickets);
+            setPurchasingSkuTracked(null);
             Alert.alert('결제 완료', '매칭권이 지급됐어요.');
           }
         } catch (e: any) {
-          Alert.alert('결제 처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
-        } finally {
           setPurchasingSkuTracked(null);
+          Alert.alert('결제 처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
         }
       }
     });
-
-    // 초기 연결은 best-effort
-    void ensureIap();
 
     return () => {
       mounted = false;
@@ -556,7 +569,7 @@ export default function StoreScreen() {
         // ignore
       }
     };
-  }, [ensureIap, products, loadMyPt, setPurchasingSkuTracked]);
+  }, [products, loadMyPt, setPurchasingSkuTracked]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -624,7 +637,12 @@ export default function StoreScreen() {
           </View>
         ) : null}
 
-        {productsLoading ? (
+        {Platform.OS === 'ios' && !showIapProductList ? (
+          <View style={styles.productsLoading}>
+            <ActivityIndicator size="small" color={MAIN} />
+            <Text style={styles.productsLoadingText}>결제 준비 중…</Text>
+          </View>
+        ) : productsLoading ? (
           <View style={styles.productsLoading}>
             <ActivityIndicator size="small" color={MAIN} />
             <Text style={styles.productsLoadingText}>상품 불러오는 중…</Text>
