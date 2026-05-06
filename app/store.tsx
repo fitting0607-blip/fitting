@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import * as InAppPurchases from 'expo-in-app-purchases';
 import { IAPResponseCode } from 'expo-in-app-purchases';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -43,6 +43,11 @@ export default function StoreScreen() {
   const [iapReady, setIapReady] = useState(false);
   const [iapLoading, setIapLoading] = useState(false);
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
+  const purchasingSkuRef = useRef<string | null>(null);
+  const setPurchasingSkuTracked = useCallback((sku: string | null) => {
+    purchasingSkuRef.current = sku;
+    setPurchasingSku(sku);
+  }, []);
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
@@ -293,17 +298,17 @@ export default function StoreScreen() {
         return;
       }
 
-      setPurchasingSku(sku);
+      setPurchasingSkuTracked(sku);
       try {
         // SKU 유효성 확인(스토어에 등록되지 않은 SKU면 여기서 실패 가능)
         await InAppPurchases.getProductsAsync([sku]);
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
-        setPurchasingSku(null);
+        setPurchasingSkuTracked(null);
       }
     },
-    [tab, purchasingSku, ensureIap]
+    [tab, purchasingSku, ensureIap, setPurchasingSkuTracked]
   );
 
   const onBuyPtTicket = useCallback(
@@ -330,17 +335,17 @@ export default function StoreScreen() {
         return;
       }
 
-      setPurchasingSku(sku);
+      setPurchasingSkuTracked(sku);
       try {
         // SKU 유효성 확인(스토어에 등록되지 않은 SKU면 여기서 실패 가능)
         await InAppPurchases.getProductsAsync([sku]);
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
-        setPurchasingSku(null);
+        setPurchasingSkuTracked(null);
       }
     },
-    [tab, myPtEligible, purchasingSku, ensureIap]
+    [tab, myPtEligible, purchasingSku, ensureIap, setPurchasingSkuTracked]
   );
 
   const formatKRW = useCallback((value: number) => {
@@ -369,12 +374,13 @@ export default function StoreScreen() {
             data: { user },
           } = await supabase.auth.getUser();
           if (user?.id) {
+            const skuRef = (purchasingSkuRef.current ?? '').trim();
             const item =
-              products.find((p) => p.apple_product_id.trim() === (purchasingSku ?? '').trim()) ?? null;
+              products.find((p) => p.apple_product_id.trim() === skuRef) ?? null;
             await supabase.from('payments').insert({
               user_id: user.id,
               product_id: item?.id ?? null,
-              product_title: item?.title ?? purchasingSku ?? 'IAP',
+              product_title: item?.title ?? skuRef || 'IAP',
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'cancelled',
             });
@@ -382,7 +388,7 @@ export default function StoreScreen() {
         } catch {
           // ignore
         }
-        setPurchasingSku(null);
+        setPurchasingSkuTracked(null);
         Alert.alert('결제 취소', '결제가 취소되었습니다.');
         return;
       }
@@ -397,12 +403,13 @@ export default function StoreScreen() {
             data: { user },
           } = await supabase.auth.getUser();
           if (user?.id) {
+            const skuRef = (purchasingSkuRef.current ?? '').trim();
             const item =
-              products.find((p) => p.apple_product_id.trim() === (purchasingSku ?? '').trim()) ?? null;
+              products.find((p) => p.apple_product_id.trim() === skuRef) ?? null;
             await supabase.from('payments').insert({
               user_id: user.id,
               product_id: item?.id ?? null,
-              product_title: item?.title ?? purchasingSku ?? 'IAP',
+              product_title: item?.title ?? skuRef || 'IAP',
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'failed',
             });
@@ -410,14 +417,14 @@ export default function StoreScreen() {
         } catch {
           // ignore
         }
-        setPurchasingSku(null);
+        setPurchasingSkuTracked(null);
         Alert.alert('결제 실패', errorCode ? String(errorCode) : '결제 처리 중 오류가 발생했습니다.');
         return;
       }
 
       const purchases = Array.isArray(results) ? results : [];
       if (purchases.length === 0) {
-        setPurchasingSku(null);
+        setPurchasingSkuTracked(null);
         return;
       }
 
@@ -441,7 +448,15 @@ export default function StoreScreen() {
           if (authError) throw authError;
           if (!user?.id) throw new Error('로그인이 필요합니다.');
 
-          const category = item?.category ?? null;
+          if (!item) {
+            Alert.alert(
+              '안내',
+              '상품 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'
+            );
+            continue;
+          }
+
+          const category = item.category;
           if (category === 'pt_ticket') {
             // payments 저장
             await supabase.from('payments').insert({
@@ -497,12 +512,13 @@ export default function StoreScreen() {
               .eq('id', user.id);
             if (upErr) throw upErr;
 
-            // point_logs 기록(요구사항)
-            await supabase.from('point_logs').insert({
-              user_id: user.id,
-              amount: addPoints > 0 ? addPoints : 0,
-              reason: addPoints > 0 ? 'ticket_purchase_bonus' : 'ticket_purchase',
-            });
+            if (addPoints > 0) {
+              await supabase.from('point_logs').insert({
+                user_id: user.id,
+                amount: addPoints,
+                reason: 'ticket_purchase_bonus',
+              });
+            }
 
             // payments 저장(요구사항)
             await supabase.from('payments').insert({
@@ -522,7 +538,7 @@ export default function StoreScreen() {
         } catch (e: any) {
           Alert.alert('결제 처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
         } finally {
-          setPurchasingSku(null);
+          setPurchasingSkuTracked(null);
         }
       }
     });
@@ -540,7 +556,7 @@ export default function StoreScreen() {
         // ignore
       }
     };
-  }, [ensureIap, products, purchasingSku, loadMyPt]);
+  }, [ensureIap, products, loadMyPt, setPurchasingSkuTracked]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
