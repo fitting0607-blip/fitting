@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import * as InAppPurchases from 'expo-in-app-purchases';
 import { IAPResponseCode } from 'expo-in-app-purchases';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -43,6 +43,8 @@ export default function StoreScreen() {
   const [iapReady, setIapReady] = useState(false);
   const [iapLoading, setIapLoading] = useState(false);
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
+  const iapProductsCache = useRef<Set<string> | null>(null);
+  const iapProductsCacheKey = useRef<string>('');
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
@@ -203,11 +205,6 @@ export default function StoreScreen() {
     if (iapLoading) return false;
     setIapLoading(true);
     try {
-      const billingCode = await InAppPurchases.getBillingResponseCodeAsync();
-      if (billingCode === IAPResponseCode.OK) {
-        setIapReady(true);
-        return true;
-      }
       await InAppPurchases.connectAsync();
       setIapReady(true);
       return true;
@@ -278,6 +275,46 @@ export default function StoreScreen() {
     void ensureIap();
   }, [ensureIap]);
 
+  React.useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    if (!iapReady) return;
+    if (productsLoading) return;
+    if (products.length === 0) return;
+
+    const skus = Array.from(
+      new Set(
+        products
+          .map((p) => String(p.apple_product_id ?? '').trim())
+          .filter((sku) => !!sku)
+      )
+    );
+    if (skus.length === 0) return;
+
+    const key = skus.join('|');
+    if (iapProductsCache.current && iapProductsCacheKey.current === key) return;
+    iapProductsCacheKey.current = key;
+
+    void (async () => {
+      try {
+        const { responseCode, results } = await InAppPurchases.getProductsAsync(skus);
+        const ok =
+          responseCode === (InAppPurchases as any).IAPResponseCode?.OK ||
+          responseCode === 0 ||
+          responseCode === IAPResponseCode.OK;
+        if (!ok) return;
+        const ids = new Set<string>();
+        const list = Array.isArray(results) ? results : [];
+        for (const r of list) {
+          const id = String((r as any)?.productId ?? '').trim();
+          if (id) ids.add(id);
+        }
+        if (ids.size > 0) iapProductsCache.current = ids;
+      } catch {
+        // ignore
+      }
+    })();
+  }, [iapReady, productsLoading, products]);
+
   const onBuyMatchingTicket = useCallback(
     async (item: StoreItem) => {
       if (tab !== 'matching') return;
@@ -299,7 +336,10 @@ export default function StoreScreen() {
 
       setPurchasingSku(sku);
       try {
-        await InAppPurchases.getProductsAsync([sku]);
+        if (!iapProductsCache.current?.has(sku)) {
+          await InAppPurchases.getProductsAsync([sku]);
+          iapProductsCache.current = new Set([...(iapProductsCache.current ?? []), sku]);
+        }
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         setPurchasingSku(null);
@@ -334,7 +374,10 @@ export default function StoreScreen() {
 
       setPurchasingSku(sku);
       try {
-        await InAppPurchases.getProductsAsync([sku]);
+        if (!iapProductsCache.current?.has(sku)) {
+          await InAppPurchases.getProductsAsync([sku]);
+          iapProductsCache.current = new Set([...(iapProductsCache.current ?? []), sku]);
+        }
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         setPurchasingSku(null);

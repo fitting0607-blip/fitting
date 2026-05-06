@@ -220,6 +220,10 @@
   - purchasingSku useState로 단순화
   - 구매 버튼: ensureIap → getProductsAsync → purchaseItemAsync 순서 유지
   - disconnectAsync 제거
+- IAP 로딩 최적화
+  - ensureIap() 단순화: getBillingResponseCodeAsync 제거
+  - 상점 진입 시 전체 SKU getProductsAsync 1회 호출 후 캐시 저장
+  - 구매 버튼: 캐시 있으면 바로 purchaseItemAsync 호출
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
