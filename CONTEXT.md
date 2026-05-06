@@ -233,9 +233,14 @@
   - ensureIap() connectPromise 관리 (pending 방지)
   - 결제 성공 후 item 없을 때 DB 재조회로 지급 로직 스킵 방지
   - 구매 흐름: ensureIap → getProductsAsync → purchaseItemAsync 복구
+- IAP 상품 조회 검증 추가: onBuyMatchingTicket/onBuyPtTicket에서 getProductsAsync 결과를 확인하고, 상품 미조회 시 purchaseItemAsync를 호출하지 않도록 수정
+- IAP 중복 구매 방지 개선: purchaseItemAsync 직후 finally에서 purchasingSku를 즉시 해제하지 않고, listener 처리 완료 후 해제하도록 변경
 - IAP DB 지급 로직 수정 (expo-in-app-purchases 기준, 중복방지 포함, payments.transaction_id 컬럼 추가, payments insert 디버그 Alert/로그 추가, purchaseState(0/1/nullish) 대응)
 - IAP 전체 수정 완료 - purchaseState(0/1/null) 대응, ticket_3 매핑 추가, payments RLS INSERT 정책 추가, transaction_id 컬럼 추가, payments payload 컬럼 정합성 수정
 - IAP listener 등록 순서 수정 - connectAsync(iapReady) 이후 setPurchaseListener 등록 (pending transaction 수신 안정화)
+- IAP listener Alert 제거: setPurchaseListener 진입 시 Alert 대신 console.log('[IAP LISTENER]', { responseCode, results, errorCode })로 변경
+- IAP premium 미구현 상품 구매 차단: com.hywoo.fitting.ticket_unlimited는 purchaseItemAsync 호출 전 차단하고, listener로 들어온 경우에도 Alert + finishTransactionAsync 후 purchasingSku 해제
+- IAP 디버그 로그 추가 - purchasingSku 중복 차단 로그, getProductsAsync 결과 검증, premium 상품 구매 차단, listener Alert 제거
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

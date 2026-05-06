@@ -322,24 +322,49 @@ export default function StoreScreen() {
         Alert.alert('구매 불가', '상품 정보가 올바르지 않습니다.');
         return;
       }
-      if (purchasingSku) return;
+      if (purchasingSku) {
+        console.log('[IAP] purchase blocked - already purchasing', purchasingSku);
+        return;
+      }
       setPurchasingSku(sku);
       try {
+        if (sku === 'com.hywoo.fitting.ticket_unlimited') {
+          Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
+          setPurchasingSku(null);
+          return;
+        }
+
         const ok = await ensureIap();
         if (!ok) {
           Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
+          setPurchasingSku(null);
           return;
         }
+
         console.log('[IAP] getProductsAsync([sku]) start', sku);
-        await InAppPurchases.getProductsAsync([sku]);
-        console.log('[IAP] getProductsAsync([sku]) done', sku);
+
+        const productRes = await InAppPurchases.getProductsAsync([sku]);
+
+        console.log('[IAP] getProductsAsync result', JSON.stringify(productRes));
+
+        const productResults = productRes?.results ?? [];
+
+        if (!productResults.length) {
+          Alert.alert(
+            '상품 조회 실패',
+            `App Store에서 상품을 찾지 못했습니다.\nsku: ${sku}\nresponseCode: ${productRes?.responseCode}`
+          );
+          setPurchasingSku(null);
+          return;
+        }
+
         console.log('[IAP] purchaseItemAsync start', sku);
-        await InAppPurchases.purchaseItemAsync(sku);
-        console.log('[IAP] purchaseItemAsync called', sku);
+
+        const purchaseRes = await InAppPurchases.purchaseItemAsync(sku);
+
+        console.log('[IAP] purchaseItemAsync result', JSON.stringify(purchaseRes));
       } catch (e: any) {
         Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
-      } finally {
-        // 결제창이 뜨지 않고 막히는 지점도 포함해 항상 해제
         setPurchasingSku(null);
       }
     },
@@ -365,20 +390,43 @@ export default function StoreScreen() {
       if (purchasingSku) return;
       setPurchasingSku(sku);
       try {
+        if (sku === 'com.hywoo.fitting.ticket_unlimited') {
+          Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
+          setPurchasingSku(null);
+          return;
+        }
+
         const ok = await ensureIap();
         if (!ok) {
           Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
+          setPurchasingSku(null);
           return;
         }
+
         console.log('[IAP] getProductsAsync([sku]) start', sku);
-        await InAppPurchases.getProductsAsync([sku]);
-        console.log('[IAP] getProductsAsync([sku]) done', sku);
+
+        const productRes = await InAppPurchases.getProductsAsync([sku]);
+
+        console.log('[IAP] getProductsAsync result', JSON.stringify(productRes));
+
+        const productResults = productRes?.results ?? [];
+
+        if (!productResults.length) {
+          Alert.alert(
+            '상품 조회 실패',
+            `App Store에서 상품을 찾지 못했습니다.\nsku: ${sku}\nresponseCode: ${productRes?.responseCode}`
+          );
+          setPurchasingSku(null);
+          return;
+        }
+
         console.log('[IAP] purchaseItemAsync start', sku);
-        await InAppPurchases.purchaseItemAsync(sku);
-        console.log('[IAP] purchaseItemAsync called', sku);
+
+        const purchaseRes = await InAppPurchases.purchaseItemAsync(sku);
+
+        console.log('[IAP] purchaseItemAsync result', JSON.stringify(purchaseRes));
       } catch (e: any) {
         Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
-      } finally {
         setPurchasingSku(null);
       }
     },
@@ -414,8 +462,7 @@ export default function StoreScreen() {
 
     const sub = InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
       if (!mounted) return;
-      console.log('IAP listener called');
-      Alert.alert('IAP listener called');
+      console.log('[IAP LISTENER]', { responseCode, results, errorCode });
 
       const insertPayment = async (
         payload: {
@@ -570,6 +617,9 @@ export default function StoreScreen() {
             // premium (별도 처리)
             console.log('[IAP] premium product detected, handled separately', sku);
             console.error('[IAP] premium grant not implemented yet');
+            Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
+            console.log('finishTransaction called');
+            await InAppPurchases.finishTransactionAsync(purchase, false);
             setPurchasingSku(null);
             continue;
           }
