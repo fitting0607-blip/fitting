@@ -380,7 +380,7 @@ export default function StoreScreen() {
             await supabase.from('payments').insert({
               user_id: user.id,
               product_id: item?.id ?? null,
-              product_title: item?.title ?? skuRef || 'IAP',
+              product_title: (item?.title ?? skuRef) || 'IAP',
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'cancelled',
             });
@@ -409,7 +409,7 @@ export default function StoreScreen() {
             await supabase.from('payments').insert({
               user_id: user.id,
               product_id: item?.id ?? null,
-              product_title: item?.title ?? skuRef || 'IAP',
+              product_title: (item?.title ?? skuRef) || 'IAP',
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'failed',
             });

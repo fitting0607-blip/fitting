@@ -205,6 +205,9 @@
   - item null일 때 finishTransactionAsync 미호출 (Apple 재전달 대기)
   - purchasingSku를 useRef로 변경 (리스너 재등록 방지)
   - point_logs는 보너스 포인트 있을 때만 insert
+- store.tsx nullish coalescing 문법 오류 수정
+  - item?.title ?? skuRef || 'IAP' → (item?.title ?? skuRef) || 'IAP'
+  - 취소 분기, 실패 분기 두 곳 모두 수정
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
