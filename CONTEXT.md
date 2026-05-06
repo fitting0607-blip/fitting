@@ -197,6 +197,10 @@
   - 결제 성공 시 matching_tickets 증가, payments/point_logs 기록
   - 결제 실패/취소 처리 포함
 - 피티권 인앱결제 플로우 구현 (매칭권과 동일한 방식)
+- IAP 연결 방식 수정
+  - app/_layout.tsx에서 앱 시작 시 connectAsync() 한 번만 호출
+  - store.tsx 클린업에서 disconnectAsync() 제거
+  - 화면 재진입 시 "Must be connected to App Store" 에러 방지
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

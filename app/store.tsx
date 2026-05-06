@@ -2,6 +2,7 @@ import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import * as InAppPurchases from 'expo-in-app-purchases';
+import { IAPResponseCode } from 'expo-in-app-purchases';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -202,11 +203,20 @@ export default function StoreScreen() {
     if (iapLoading) return false;
     setIapLoading(true);
     try {
-      const res = await InAppPurchases.connectAsync();
-      const ok = Boolean((res as any)?.connected ?? true);
-      setIapReady(ok);
-      return ok;
-    } catch {
+      const billingCode = await InAppPurchases.getBillingResponseCodeAsync();
+      if (billingCode === IAPResponseCode.OK) {
+        setIapReady(true);
+        return true;
+      }
+      await InAppPurchases.connectAsync();
+      setIapReady(true);
+      return true;
+    } catch (e: unknown) {
+      const msg = String((e as { message?: string })?.message ?? e ?? '');
+      if (msg.includes('Already connected')) {
+        setIapReady(true);
+        return true;
+      }
       setIapReady(false);
       return false;
     } finally {
@@ -529,7 +539,6 @@ export default function StoreScreen() {
       } catch {
         // ignore
       }
-      void InAppPurchases.disconnectAsync();
     };
   }, [ensureIap, products, purchasingSku, loadMyPt]);
 

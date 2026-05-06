@@ -1,8 +1,10 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import * as InAppPurchases from 'expo-in-app-purchases';
 import { Redirect, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import MobileAds from 'react-native-google-mobile-ads';
 
@@ -29,6 +31,19 @@ export default function RootLayout() {
     MobileAds()
       .initialize()
       .catch(() => null);
+
+    if (Platform.OS === 'ios') {
+      void (async () => {
+        try {
+          await InAppPurchases.connectAsync();
+        } catch (e: unknown) {
+          const msg = String((e as { message?: string })?.message ?? e ?? '');
+          if (!msg.includes('Already connected')) {
+            // 연결 실패는 상점 진입 시 ensureIap에서 재시도
+          }
+        }
+      })();
+    }
 
     try {
       ensureExpoNotificationHandlerInstalled();
