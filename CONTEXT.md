@@ -224,6 +224,10 @@
   - ensureIap() 단순화: getBillingResponseCodeAsync 제거
   - 상점 진입 시 전체 SKU getProductsAsync 1회 호출 후 캐시 저장
   - 구매 버튼: 캐시 있으면 바로 purchaseItemAsync 호출
+- IAP 구매 플로우 재작성
+  - 상점 진입 시 전체 SKU getProductsAsync 사전 조회 (iapQueried state)
+  - 구매 버튼: iapReady && iapQueried 둘 다 true일 때만 purchaseItemAsync 직접 호출
+  - 상품 목록: iapReady && iapQueried 전까지 "결제 준비 중..." 스피너 표시
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

@@ -42,9 +42,9 @@ export default function StoreScreen() {
   const [tab, setTab] = useState<'matching' | 'pt'>('matching');
   const [iapReady, setIapReady] = useState(false);
   const [iapLoading, setIapLoading] = useState(false);
+  const [iapQueried, setIapQueried] = useState(false);
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
-  const iapProductsCache = useRef<Set<string> | null>(null);
-  const iapProductsCacheKey = useRef<string>('');
+  const iapQueriedKeyRef = useRef<string>('');
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
@@ -277,9 +277,18 @@ export default function StoreScreen() {
 
   React.useEffect(() => {
     if (Platform.OS !== 'ios') return;
-    if (!iapReady) return;
-    if (productsLoading) return;
-    if (products.length === 0) return;
+    if (!iapReady) {
+      setIapQueried(false);
+      return;
+    }
+    if (productsLoading) {
+      setIapQueried(false);
+      return;
+    }
+    if (products.length === 0) {
+      setIapQueried(false);
+      return;
+    }
 
     const skus = Array.from(
       new Set(
@@ -288,32 +297,30 @@ export default function StoreScreen() {
           .filter((sku) => !!sku)
       )
     );
-    if (skus.length === 0) return;
+    if (skus.length === 0) {
+      setIapQueried(false);
+      return;
+    }
 
     const key = skus.join('|');
-    if (iapProductsCache.current && iapProductsCacheKey.current === key) return;
-    iapProductsCacheKey.current = key;
+    if (iapQueried && iapQueriedKeyRef.current === key) return;
+    iapQueriedKeyRef.current = key;
+    setIapQueried(false);
 
     void (async () => {
       try {
-        const { responseCode, results } = await InAppPurchases.getProductsAsync(skus);
+        const { responseCode } = await InAppPurchases.getProductsAsync(skus);
         const ok =
           responseCode === (InAppPurchases as any).IAPResponseCode?.OK ||
           responseCode === 0 ||
           responseCode === IAPResponseCode.OK;
         if (!ok) return;
-        const ids = new Set<string>();
-        const list = Array.isArray(results) ? results : [];
-        for (const r of list) {
-          const id = String((r as any)?.productId ?? '').trim();
-          if (id) ids.add(id);
-        }
-        if (ids.size > 0) iapProductsCache.current = ids;
+        setIapQueried(true);
       } catch {
         // ignore
       }
     })();
-  }, [iapReady, productsLoading, products]);
+  }, [iapReady, iapQueried, productsLoading, products]);
 
   const onBuyMatchingTicket = useCallback(
     async (item: StoreItem) => {
@@ -328,25 +335,20 @@ export default function StoreScreen() {
         return;
       }
       if (purchasingSku) return;
-      const ok = await ensureIap();
-      if (!ok) {
+      if (!iapReady || !iapQueried) {
         Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
         return;
       }
 
       setPurchasingSku(sku);
       try {
-        if (!iapProductsCache.current?.has(sku)) {
-          await InAppPurchases.getProductsAsync([sku]);
-          iapProductsCache.current = new Set([...(iapProductsCache.current ?? []), sku]);
-        }
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         setPurchasingSku(null);
         Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       }
     },
-    [tab, purchasingSku, ensureIap]
+    [tab, purchasingSku, iapReady, iapQueried]
   );
 
   const onBuyPtTicket = useCallback(
@@ -366,25 +368,20 @@ export default function StoreScreen() {
         return;
       }
       if (purchasingSku) return;
-      const ok = await ensureIap();
-      if (!ok) {
+      if (!iapReady || !iapQueried) {
         Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
         return;
       }
 
       setPurchasingSku(sku);
       try {
-        if (!iapProductsCache.current?.has(sku)) {
-          await InAppPurchases.getProductsAsync([sku]);
-          iapProductsCache.current = new Set([...(iapProductsCache.current ?? []), sku]);
-        }
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         setPurchasingSku(null);
         Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       }
     },
-    [tab, myPtEligible, purchasingSku, ensureIap]
+    [tab, myPtEligible, purchasingSku, iapReady, iapQueried]
   );
 
   const formatKRW = useCallback((value: number) => {
@@ -398,7 +395,7 @@ export default function StoreScreen() {
 
   const hasAnyProducts = products.length > 0;
   const productsEmpty = useMemo(() => !productsLoading && !hasAnyProducts, [productsLoading, hasAnyProducts]);
-  const showIapProductList = Platform.OS !== 'ios' || iapReady;
+  const showIapProductList = Platform.OS !== 'ios' || (iapReady && iapQueried);
 
   React.useEffect(() => {
     if (Platform.OS !== 'ios') return;
