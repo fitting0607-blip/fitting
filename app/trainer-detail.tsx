@@ -15,6 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { TrainerProfileRow } from '@/app/trainer-types';
+import { insertMyNotification } from '@/notification-insert';
+import { useMatchModal } from './hooks/useMatchModal';
 import { supabase } from '@/supabase';
 
 const MAIN = '#3B3BF9';
@@ -29,6 +31,8 @@ export default function TrainerDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<TrainerProfileRow | null>(null);
   const [nickname, setNickname] = useState<string>('');
+  const [openingProfile, setOpeningProfile] = useState(false);
+  const { MatchModal, openMatchModal } = useMatchModal();
 
   const load = useCallback(async () => {
     if (!id) {
@@ -79,6 +83,72 @@ export default function TrainerDetailScreen() {
     if (a && b) return `${a} ${b}`;
     return a || b || '';
   }, [profile]);
+
+  const openTrainerProfileWithPoints = useCallback(() => {
+    if (!profile?.user_id) return;
+    const targetUserId = String(profile.user_id ?? '').trim();
+    if (!targetUserId) return;
+
+    Alert.alert('프로필을 열람하시겠어요?', '10포인트가 차감됩니다.', [
+      { text: '안할래요', style: 'cancel' },
+      {
+        text: '사용할게요',
+        onPress: () => {
+          void (async () => {
+            if (openingProfile) return;
+            setOpeningProfile(true);
+            try {
+              const {
+                data: { user },
+                error: authError,
+              } = await supabase.auth.getUser();
+              if (authError) throw authError;
+              if (!user?.id) throw new Error('로그인이 필요합니다.');
+
+              const { data: me, error: meError } = await supabase
+                .from('users')
+                .select('points')
+                .eq('id', user.id)
+                .maybeSingle();
+              if (meError) throw meError;
+
+              const currentPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
+              if (currentPoints < 10) {
+                Alert.alert('포인트가 부족해요');
+                return;
+              }
+
+              const { error: updateError } = await supabase
+                .from('users')
+                .update({ points: currentPoints - 10 })
+                .eq('id', user.id);
+              if (updateError) throw updateError;
+
+              const { error: logError } = await supabase.from('point_logs').insert({
+                user_id: user.id,
+                amount: -10,
+                reason: 'profile_view',
+              });
+              if (logError) throw logError;
+
+              await insertMyNotification({
+                userId: user.id,
+                type: 'point',
+                content: '프로필 열람 -10p 차감됐어요',
+                related_id: targetUserId,
+              });
+
+              router.push({ pathname: '/user-profile', params: { userId: targetUserId } });
+            } catch (e: any) {
+              Alert.alert('처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+            } finally {
+              setOpeningProfile(false);
+            }
+          })();
+        },
+      },
+    ]);
+  }, [openingProfile, profile?.user_id, router]);
 
   if (loading) {
     return (
@@ -159,12 +229,23 @@ export default function TrainerDetailScreen() {
 
         <Pressable
           style={styles.primaryBtn}
-          onPress={() => Alert.alert('안내', '준비 중입니다')}
+          onPress={() => openMatchModal(String(profile.user_id ?? '').trim())}
           accessibilityRole="button"
         >
           <Text style={styles.primaryBtnText}>피티 매칭하기</Text>
         </Pressable>
+
+        <Pressable
+          style={styles.secondaryBtn}
+          onPress={openTrainerProfileWithPoints}
+          accessibilityRole="button"
+          accessibilityLabel="프로필 보기"
+        >
+          <Text style={styles.secondaryBtnText}>프로필 보기</Text>
+        </Pressable>
       </ScrollView>
+
+      <MatchModal />
     </SafeAreaView>
   );
 }
@@ -277,6 +358,21 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryBtn: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  secondaryBtnText: {
+    color: '#111111',
+    fontSize: 15,
     fontWeight: '700',
   },
 });
