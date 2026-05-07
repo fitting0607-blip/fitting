@@ -233,6 +233,14 @@
   - ensureIap() connectPromise 관리 (pending 방지)
   - 결제 성공 후 item 없을 때 DB 재조회로 지급 로직 스킵 방지
   - 구매 흐름: ensureIap → getProductsAsync → purchaseItemAsync 복구
+- (2026-05-07) IAP 무한 로딩 방지 강화
+  - withTimeout helper 추가
+  - ensureIap / getProductsAsync / purchaseItemAsync에 timeout 적용
+  - purchasingSku stuck 방지(스테일 값 감지 시 reset)
+  - ensureIap() 내부 connectAsync도 withTimeout 적용 + 실패/timeout 시 iapReady=false로 되돌리고 throw
+  - 구매 핸들러 try/catch/finally로 정리, finally에서 purchasingSku 해제 보장
+  - Windows 환경 대응: timeout/에러 시 Alert로 오류 표시
+  - 단계별 Alert 디버그 추가(ensureIap 전후, getProductsAsync 결과)
 - IAP 상품 조회 검증 추가: onBuyMatchingTicket/onBuyPtTicket에서 getProductsAsync 결과를 확인하고, 상품 미조회 시 purchaseItemAsync를 호출하지 않도록 수정
 - IAP 중복 구매 방지 개선: purchaseItemAsync 직후 finally에서 purchasingSku를 즉시 해제하지 않고, listener 처리 완료 후 해제하도록 변경
 - IAP DB 지급 로직 수정 (expo-in-app-purchases 기준, 중복방지 포함, payments.transaction_id 컬럼 추가, payments insert 디버그 Alert/로그 추가, purchaseState(0/1/nullish) 대응)

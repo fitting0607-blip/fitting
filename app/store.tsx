@@ -20,6 +20,20 @@ import { supabase } from '@/supabase';
 
 const MAIN = '#6C47FF';
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+function isTimeoutError(e: unknown): boolean {
+  const msg = String((e as any)?.message ?? e ?? '');
+  return msg.includes('timeout after');
+}
+
 type StoreItem = {
   id: string;
   category: 'ticket' | 'matching_ticket' | 'pt_ticket';
@@ -130,7 +144,7 @@ export default function StoreScreen() {
       }
       if (error) throw error;
 
-      const rows = (data ?? []) as {
+      const rows = (data ?? []) as unknown as {
         id: string;
         title: string | null;
         ticket_count: number | null;
@@ -232,7 +246,7 @@ export default function StoreScreen() {
       setIapLoading(true);
       try {
         console.log('[IAP] connectAsync start');
-        await InAppPurchases.connectAsync();
+        await withTimeout(InAppPurchases.connectAsync(), 8000, 'connectAsync');
         console.log('[IAP] connectAsync success');
         setIapReady(true);
         return true;
@@ -244,7 +258,9 @@ export default function StoreScreen() {
           return true;
         }
         setIapReady(false);
-        return false;
+        iapConnectPromiseRef.current = null;
+        Alert.alert('[IAP] connectAsync error', String(e));
+        throw e;
       } finally {
         setIapLoading(false);
         iapConnectPromiseRef.current = null;
@@ -307,7 +323,7 @@ export default function StoreScreen() {
 
   React.useEffect(() => {
     if (Platform.OS !== 'ios') return;
-    void ensureIap();
+    void withTimeout(ensureIap(), 8000, 'ensureIap');
   }, [ensureIap]);
 
   const onBuyMatchingTicket = useCallback(
@@ -323,48 +339,70 @@ export default function StoreScreen() {
         return;
       }
       if (purchasingSku) {
-        console.log('[IAP] purchase blocked - already purchasing', purchasingSku);
-        return;
+        console.log('[IAP] stale purchasingSku reset', purchasingSku);
+        setPurchasingSku(null);
       }
       setPurchasingSku(sku);
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
-          setPurchasingSku(null);
           return;
         }
 
-        const ok = await ensureIap();
+        console.log('[IAP] before ensureIap');
+        const ok = await withTimeout(ensureIap(), 8000, 'ensureIap');
+        console.log('[IAP] after ensureIap', ok);
+        Alert.alert('[IAP] ensureIap', 'ok=' + ok);
         if (!ok) {
           Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
-          setPurchasingSku(null);
           return;
         }
 
         console.log('[IAP] getProductsAsync([sku]) start', sku);
 
-        const productRes = await InAppPurchases.getProductsAsync([sku]);
+        const productRes = await withTimeout(
+          InAppPurchases.getProductsAsync([sku]),
+          8000,
+          'getProductsAsync'
+        );
 
         console.log('[IAP] getProductsAsync result', JSON.stringify(productRes));
 
         const productResults = productRes?.results ?? [];
+        console.log('[IAP] responseCode', productRes?.responseCode);
+        Alert.alert(
+          '[IAP] products',
+          'responseCode=' + productRes?.responseCode + ' count=' + productResults.length
+        );
 
         if (!productResults.length) {
           Alert.alert(
             '상품 조회 실패',
             `App Store에서 상품을 찾지 못했습니다.\nsku: ${sku}\nresponseCode: ${productRes?.responseCode}`
           );
-          setPurchasingSku(null);
           return;
         }
 
         console.log('[IAP] purchaseItemAsync start', sku);
 
-        const purchaseRes = await InAppPurchases.purchaseItemAsync(sku);
+        const purchaseRes = await withTimeout(
+          InAppPurchases.purchaseItemAsync(sku),
+          15000,
+          'purchaseItemAsync'
+        );
 
         console.log('[IAP] purchaseItemAsync result', JSON.stringify(purchaseRes));
       } catch (e: any) {
-        Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+        console.log('[IAP] error raw', e);
+        if (isTimeoutError(e)) {
+          Alert.alert(
+            '구매 지연',
+            '인앱결제 연결이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'
+          );
+        } else {
+          Alert.alert('[IAP] error', typeof e === 'object' ? JSON.stringify(e, null, 2) : String(e));
+        }
+      } finally {
         setPurchasingSku(null);
       }
     },
@@ -392,20 +430,22 @@ export default function StoreScreen() {
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
-          setPurchasingSku(null);
           return;
         }
 
-        const ok = await ensureIap();
+        const ok = await withTimeout(ensureIap(), 8000, 'ensureIap');
         if (!ok) {
           Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
-          setPurchasingSku(null);
           return;
         }
 
         console.log('[IAP] getProductsAsync([sku]) start', sku);
 
-        const productRes = await InAppPurchases.getProductsAsync([sku]);
+        const productRes = await withTimeout(
+          InAppPurchases.getProductsAsync([sku]),
+          8000,
+          'getProductsAsync'
+        );
 
         console.log('[IAP] getProductsAsync result', JSON.stringify(productRes));
 
@@ -416,17 +456,27 @@ export default function StoreScreen() {
             '상품 조회 실패',
             `App Store에서 상품을 찾지 못했습니다.\nsku: ${sku}\nresponseCode: ${productRes?.responseCode}`
           );
-          setPurchasingSku(null);
           return;
         }
 
         console.log('[IAP] purchaseItemAsync start', sku);
 
-        const purchaseRes = await InAppPurchases.purchaseItemAsync(sku);
+        const purchaseRes = await withTimeout(
+          InAppPurchases.purchaseItemAsync(sku),
+          15000,
+          'purchaseItemAsync'
+        );
 
         console.log('[IAP] purchaseItemAsync result', JSON.stringify(purchaseRes));
       } catch (e: any) {
-        Alert.alert('결제 요청 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+        if (isTimeoutError(e)) {
+          Alert.alert(
+            '구매 지연',
+            '인앱결제 연결이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'
+          );
+        }
+        Alert.alert('[IAP] error', String(e));
+      } finally {
         setPurchasingSku(null);
       }
     },
@@ -460,7 +510,7 @@ export default function StoreScreen() {
       'com.hywoo.fitting.ticket_50': 50,
     };
 
-    const sub = InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
+    InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
       if (!mounted) return;
       console.log('[IAP LISTENER]', { responseCode, results, errorCode });
 
@@ -762,7 +812,6 @@ export default function StoreScreen() {
       mounted = false;
       try {
         // expo-in-app-purchases는 remove API가 없어서 listener를 빈 함수로 덮어씌움
-        if (typeof sub === 'function') sub();
         InAppPurchases.setPurchaseListener(() => {});
       } catch {
         // ignore
