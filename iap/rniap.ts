@@ -71,16 +71,6 @@ export async function fetchProducts(productIds: readonly string[] = getAllAppleP
     const ids = productIds.map((x) => String(x ?? '').trim()).filter(Boolean);
     const products = (await rnFetchProducts({ skus: ids, type: 'in-app' } as any)) as Product[] | null | undefined;
     const list = (products ?? []) as Product[];
-    console.log(
-      '[RNIAP] fetched products',
-      list.map((p: any) => ({
-        id: String(p?.id ?? p?.productId ?? '').trim(),
-        title: p?.title,
-        displayPrice: p?.displayPrice,
-        price: p?.price,
-        type: p?.type,
-      }))
-    );
     return list;
   } catch (e) {
     console.error('[RNIAP] fetchProducts error', e);
@@ -101,32 +91,6 @@ export async function requestPurchase(productId: string): Promise<void> {
   if (!sku) throw new Error('missing productId');
   if (sku === 'com.hywoo.fitting.ticket_unlimited') {
     throw new Error('프리미엄 상품은 준비 중입니다.');
-  }
-
-  console.log('[RNIAP] requestPurchase sku', sku);
-
-  // App Store에서 해당 SKU가 실제로 조회 가능한지 확인 (3개/5개 결제창 미출현 진단)
-  // - 조회 결과 자체가 비어 있거나 해당 SKU가 누락된 경우 결제창은 절대 뜨지 않음.
-  //   App Store Connect 측 상품 상태(Approved/Ready to Submit)와 가격대 적용 여부,
-  //   bundle id mismatch, sandbox account region 등 환경 문제일 가능성이 높음.
-  try {
-    const fetched = await fetchProducts([sku]);
-    const found = fetched.some((p) => getProductIdFromProduct(p) === sku);
-    if (!found) {
-      console.warn('[RNIAP] sku not found in fetchProducts result', {
-        sku,
-        fetched: fetched.map((p) => getProductIdFromProduct(p)),
-      });
-      Alert.alert('상품 조회 실패', sku);
-      throw new Error(`product not available on App Store: ${sku}`);
-    }
-  } catch (verifyErr: any) {
-    const msg = String(verifyErr?.message ?? '');
-    if (msg.startsWith('product not available on App Store')) {
-      throw verifyErr;
-    }
-    // fetchProducts 자체가 실패한 경우는 결제창은 띄워보고 native 단의 에러로 fallback
-    console.warn('[RNIAP] fetchProducts verify failed (falling through to requestPurchase)', verifyErr);
   }
 
   // Ensure we always finish manually only after DB grant succeeds.

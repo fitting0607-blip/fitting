@@ -296,6 +296,10 @@
   - 결제 구조 그대로 유지: purchaseUpdatedListener 중심, DB 지급 성공 후 finishTransaction, transactionId 중복 지급 방지
   - tsc --noEmit: 이전에 남아 있던 'getProducts' / 'ProductPurchase' import 관련 오류 해소 확인 (나머지 오류는 본 작업과 무관한 pre-existing 항목)
   - 3/5 상품 결제창 미출현 원인은 클라이언트 결제 플로우가 아닌 환경 측 문제 가능성이 높음(=fetchProducts 결과에 누락). App Store Connect에서 ticket_3/ticket_5 상품 상태(Approved/Ready to Submit), 가격대 적용, 번들 ID/지역, sandbox 계정 region 확인 필요. 다음 빌드 실행 시 [RNIAP] fetched products / [STORE] iap diagnostics 로그로 누락 SKU 식별 가능
+- (2026-05-07) requestPurchase 직전 fetchProducts 사전 검증 제거
+  - false negative로 정상 상품도 차단되는 문제 수정
+  - requestPurchase는 바로 native 호출로 변경
+  - 진단 로그는 store.tsx loadMatchingProducts에만 유지
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정

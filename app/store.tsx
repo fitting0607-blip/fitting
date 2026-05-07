@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -44,31 +44,6 @@ export default function StoreScreen() {
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
-
-  const fetchProductBySku = useCallback(async (sku: string) => {
-    const trimmed = String(sku ?? '').trim();
-    if (!trimmed) return null;
-    const { data, error } = await supabase
-      .from('products')
-      .select('id,category,title,ticket_count,price,bonus_points,apple_product_id')
-      .eq('apple_product_id', trimmed)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) return null;
-    return {
-      id: String((data as any).id),
-      category: String((data as any).category) as StoreItem['category'],
-      apple_product_id: String((data as any).apple_product_id ?? trimmed).trim(),
-      title: (data as any).title ?? '상품',
-      ticket_count: typeof (data as any).ticket_count === 'number' ? (data as any).ticket_count : 0,
-      price: typeof (data as any).price === 'number' ? (data as any).price : 0,
-      original_price: 0,
-      discount_rate: 0,
-      bonus_points: typeof (data as any).bonus_points === 'number' ? (data as any).bonus_points : 0,
-    } satisfies StoreItem;
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
