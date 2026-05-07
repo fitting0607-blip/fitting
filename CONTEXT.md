@@ -309,6 +309,10 @@
   - DB 지급 성공 후에만 finishTransaction 원칙 재적용
   - purchaseUpdatedListener 진단 Alert 임시 추가 (__DEV__ 전용)
   - _layout.tsx stopListeners는 RootLayout unmount 시에만 호출 확인
+- RN IAP 진단 Alert __DEV__ 조건 제거, TestFlight 디버그 보강
+  - listener received / userId ok|missing / grant start|result / finish start|done|error 전 단계 Alert 추가
+  - grantRes.ok === false 시 kind/message Alert 표시
+  - finishTransaction 실패 시 Alert 표시
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정

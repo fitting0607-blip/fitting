@@ -57,7 +57,6 @@ function isAuthSessionMissingError(input: { code?: string | null; message?: stri
 
 function debugIapAlert(transactionId: string, step: string, detail?: string): void {
   // 임시 진단용: 같은 transactionId에 대해 과도한 Alert 반복 방지
-  if (typeof __DEV__ !== 'undefined' && __DEV__ !== true) return;
   const key = `${transactionId}:${step}`;
   if (debugAlertedTransactionIds.has(key)) return;
   debugAlertedTransactionIds.add(key);
@@ -194,6 +193,11 @@ export function startListeners(): void {
         error: authError,
       } = await supabase.auth.getUser();
       if (authError || !user?.id) {
+        debugIapAlert(
+          transactionId,
+          'userId missing',
+          `productId=${productId || '(missing)'}\nauthError=${String((authError as any)?.message ?? '')}`
+        );
         console.log('[RNIAP] skip purchase update without auth session', {
           transactionId,
           productId,
@@ -203,6 +207,7 @@ export function startListeners(): void {
       }
       debugIapAlert(transactionId, 'userId ok', `userId=${user.id}`);
 
+      debugIapAlert(transactionId, 'grant start');
       const grantRes = await grantAppleIapAndRecord({
         userId: user.id,
         productId,
@@ -230,12 +235,24 @@ export function startListeners(): void {
         }
         // 실제 DB 지급 실패만 Alert (pending 유지: finishTransaction 호출 금지)
         console.error('[RNIAP] grant failed (NOT finishing)', grantRes);
-        Alert.alert('결제 처리 실패', String(grantRes.message ?? '결제 처리 중 오류가 발생했습니다.'));
+        Alert.alert(
+          '결제 처리 실패',
+          `kind=${String((grantRes as any)?.kind ?? '')}\n${String(grantRes.message ?? '결제 처리 중 오류가 발생했습니다.')}`
+        );
         return;
       }
 
-      await finishTransaction(purchase, productId);
-      debugIapAlert(transactionId, 'finish done');
+      debugIapAlert(transactionId, 'finish start');
+      try {
+        await finishTransaction(purchase, productId);
+        debugIapAlert(transactionId, 'finish done');
+      } catch (finishErr: any) {
+        // DB 지급은 성공했지만 finish 실패 → Apple 측 pending 가능성 있으므로 사용자/테스트에서 확인 가능하게 Alert
+        console.error('[RNIAP] finishTransaction failed after grant', finishErr);
+        debugIapAlert(transactionId, 'finish error', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
+        Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
+        return;
+      }
       processedTransactionIds.add(transactionId);
 
       if (!alertedTransactionIds.has(transactionId)) {
@@ -245,6 +262,7 @@ export function startListeners(): void {
       }
     } catch (e: any) {
       const msg = String(e?.message ?? e ?? '');
+      debugIapAlert(transactionId || '(missing)', 'listener error', msg || '(no message)');
       if (isAuthSessionMissingError({ code: e?.code, message: msg })) {
         console.log('[RNIAP] skip purchase update without auth session', {
           transactionId,
