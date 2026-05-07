@@ -264,6 +264,11 @@
   - DB 지급 성공 후에만 finishTransaction 호출
   - transactionId 중복 지급 방지 유지
   - git tag: backup-expo-iap-2026-05-07 (롤백 포인트)
+- react-native-iap v15 requestPurchase payload 수정
+  - react-native-iap 버전: 15.2.0
+  - requestPurchase를 v15 형식으로 수정:
+    { type: 'in-app', request: { apple: { sku, andDangerouslyFinishTransactionAutomatically: false } } }
+  - requestPurchase 직전 디버그 로그 추가
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

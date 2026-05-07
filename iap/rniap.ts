@@ -7,6 +7,7 @@ import {
   purchaseErrorListener,
   purchaseUpdatedListener,
   requestPurchase as rnRequestPurchase,
+  type MutationRequestPurchaseArgs,
   type Product,
   type ProductPurchase,
   type PurchaseError,
@@ -75,10 +76,18 @@ export async function requestPurchase(productId: string): Promise<void> {
   console.log('[RNIAP] requestPurchase start', sku);
 
   // Ensure we always finish manually only after DB grant succeeds.
-  await rnRequestPurchase({
-    sku,
-    andDangerouslyFinishTransactionAutomaticallyIOS: false,
-  } as any);
+  // react-native-iap v8+ (current: v15) expects an object payload.
+  const payload: MutationRequestPurchaseArgs = {
+    type: 'in-app',
+    request: {
+      apple: {
+        sku,
+        andDangerouslyFinishTransactionAutomatically: false,
+      },
+    },
+  };
+  console.log('[RNIAP] requestPurchase payload', payload);
+  await rnRequestPurchase(payload);
 }
 
 export function startListeners(): void {
