@@ -379,15 +379,7 @@ export default function StoreScreen() {
         }
 
         console.log('[IAP] purchaseItemAsync start', sku);
-
-        const purchaseRes = await withTimeout(
-          InAppPurchases.purchaseItemAsync(sku),
-          15000,
-          'purchaseItemAsync'
-        );
-
-        console.log('[IAP] purchaseItemAsync result', JSON.stringify(purchaseRes));
-        Alert.alert('[IAP] purchase result', JSON.stringify(purchaseRes));
+        await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         console.log('[IAP] error raw', e);
         if (isTimeoutError(e)) {
@@ -551,9 +543,23 @@ export default function StoreScreen() {
       'com.hywoo.fitting.ticket_50': 50,
     };
 
+    console.log('[IAP] listener registered');
+
     InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
+      console.log(
+        '[IAP] purchase listener event',
+        JSON.stringify({
+          responseCode,
+          errorCode,
+          resultsLength: results?.length,
+        })
+      );
+
       if (!mounted) return;
-      console.log('[IAP LISTENER]', { responseCode, results, errorCode });
+
+      try {
+        console.log('[IAP] responseCode', responseCode);
+        console.log('[IAP] results.length', Array.isArray(results) ? results.length : 0);
 
       const insertPayment = async (
         payload: {
@@ -575,7 +581,6 @@ export default function StoreScreen() {
           Alert.alert(JSON.stringify(error));
           return { ok: false as const, error };
         }
-        Alert.alert('payment insert success');
         return { ok: true as const, error: null };
       };
 
@@ -651,9 +656,10 @@ export default function StoreScreen() {
               (purchase as any)?.orderId ??
               ''
           ).trim();
-          console.log('[IAP] purchase', { productId: sku, transactionId });
-          console.log('purchase.productId', sku, 'purchase.transactionId', transactionId);
-          Alert.alert('IAP purchase', `state=${String(state)}\nproductId=${sku}\ntransactionId=${transactionId}`);
+          console.log('[IAP] productId', sku);
+          console.log('[IAP] transactionId', transactionId);
+          console.log('[IAP] purchaseState', state);
+          console.log('[IAP] processing purchase start', transactionId);
 
           const purchaseState = (InAppPurchases as any).IAPPurchaseState;
           const purchased =
@@ -709,8 +715,9 @@ export default function StoreScreen() {
             console.log('[IAP] premium product detected, handled separately', sku);
             console.error('[IAP] premium grant not implemented yet');
             Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
-            console.log('finishTransaction called');
+            console.log('[IAP] finishTransaction start', transactionId);
             await InAppPurchases.finishTransactionAsync(purchase, false);
+            console.log('[IAP] finishTransaction done', transactionId);
             setPurchasingSku(null);
             continue;
           }
@@ -726,8 +733,9 @@ export default function StoreScreen() {
             if (dupErr) throw dupErr;
             if ((existing?.length ?? 0) > 0) {
               console.log('[IAP] duplicate transactionId, skip grant', transactionId);
-              console.log('finishTransaction called');
+              console.log('[IAP] finishTransaction start', transactionId);
               await InAppPurchases.finishTransactionAsync(purchase, false);
+              console.log('[IAP] finishTransaction done', transactionId);
               setPurchasingSku(null);
               continue;
             }
@@ -778,8 +786,9 @@ export default function StoreScreen() {
             }
             console.log('user update success');
 
-            console.log('finishTransaction called');
+            console.log('[IAP] finishTransaction start', transactionId);
             await InAppPurchases.finishTransactionAsync(purchase, false);
+            console.log('[IAP] finishTransaction done', transactionId);
 
             void loadMyPt();
             setPurchasingSku(null);
@@ -834,18 +843,30 @@ export default function StoreScreen() {
           }
           console.log('user update success');
 
-          console.log('finishTransaction called');
+          console.log('[IAP] finishTransaction start', transactionId);
           await InAppPurchases.finishTransactionAsync(purchase, false);
+          console.log('[IAP] finishTransaction done', transactionId);
 
           setPoints(curPoints + addPoints);
           setMatchingTickets(curTickets + addTickets);
           setPurchasingSku(null);
-          Alert.alert('결제 완료', '매칭권이 지급됐어요.');
+          Alert.alert('결제 완료', '매칭권 지급 완료');
         } catch (e: any) {
           setPurchasingSku(null);
           console.error(e);
           Alert.alert('결제 처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+        } finally {
+          const transactionId = String(
+            (purchase as any)?.transactionId ??
+              (purchase as any)?.transactionID ??
+              (purchase as any)?.orderId ??
+              ''
+          ).trim();
+          console.log('[IAP] processing purchase end', transactionId);
         }
+      }
+      } catch (e) {
+        console.log('[IAP] listener error', e);
       }
     });
 
