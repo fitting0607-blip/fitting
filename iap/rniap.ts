@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import {
   endConnection as rnEndConnection,
   finishTransaction as rnFinishTransaction,
@@ -20,19 +20,17 @@ import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
 let listenersStarted = false;
 let purchaseUpdatedSub: { remove: () => void } | null = null;
 let purchaseErrorSub: { remove: () => void } | null = null;
+const alertedTransactionIds = new Set<string>();
 
 export async function initConnection(): Promise<boolean> {
   if (Platform.OS !== 'ios') {
-    console.log('[RNIAP] initConnection skipped (not ios)');
     return false;
   }
   try {
-    console.log('[RNIAP] initConnection start');
     const ok = await rnInitConnection();
-    console.log('[RNIAP] initConnection ok', ok);
     return Boolean(ok);
   } catch (e) {
-    console.log('[RNIAP] initConnection error', e);
+    console.error('[RNIAP] initConnection error', e);
     return false;
   }
 }
@@ -40,11 +38,9 @@ export async function initConnection(): Promise<boolean> {
 export async function endConnection(): Promise<void> {
   if (Platform.OS !== 'ios') return;
   try {
-    console.log('[RNIAP] endConnection start');
     await rnEndConnection();
-    console.log('[RNIAP] endConnection done');
   } catch (e) {
-    console.log('[RNIAP] endConnection error', e);
+    console.error('[RNIAP] endConnection error', e);
   }
 }
 
@@ -52,28 +48,23 @@ export async function getProducts(productIds: readonly string[] = getAllApplePro
   if (Platform.OS !== 'ios') return [];
   try {
     const ids = productIds.map((x) => String(x ?? '').trim()).filter(Boolean);
-    console.log('[RNIAP] getProducts start', ids);
     const products = await rnGetProducts({ skus: ids } as any);
-    console.log('[RNIAP] getProducts done', products?.length ?? 0);
     return (products ?? []) as any;
   } catch (e) {
-    console.log('[RNIAP] getProducts error', e);
+    console.error('[RNIAP] getProducts error', e);
     return [];
   }
 }
 
 export async function requestPurchase(productId: string): Promise<void> {
   if (Platform.OS !== 'ios') {
-    console.log('[RNIAP] requestPurchase skipped (not ios)');
     return;
   }
   const sku = String(productId ?? '').trim();
   if (!sku) throw new Error('missing productId');
   if (sku === 'com.hywoo.fitting.ticket_unlimited') {
-    console.log('[RNIAP] requestPurchase blocked (premium)', sku);
     throw new Error('프리미엄 상품은 준비 중입니다.');
   }
-  console.log('[RNIAP] requestPurchase start', sku);
 
   // Ensure we always finish manually only after DB grant succeeds.
   // react-native-iap v8+ (current: v15) expects an object payload.
@@ -86,7 +77,6 @@ export async function requestPurchase(productId: string): Promise<void> {
       },
     },
   };
-  console.log('[RNIAP] requestPurchase payload', payload);
   await rnRequestPurchase(payload);
 }
 
@@ -95,22 +85,10 @@ export function startListeners(): void {
   if (listenersStarted) return;
   listenersStarted = true;
 
-  console.log('[RNIAP] startListeners');
-
   purchaseUpdatedSub = purchaseUpdatedListener(async (purchase: ProductPurchase) => {
-    console.log('[RNIAP] purchaseUpdatedListener event', {
-      productId: (purchase as any)?.productId,
-      transactionId: (purchase as any)?.transactionId,
-      originalTransactionIdentifierIOS: (purchase as any)?.originalTransactionIdentifierIOS,
-      hasReceipt: Boolean((purchase as any)?.transactionReceipt),
-    });
-
     try {
       const productId = String((purchase as any)?.productId ?? '').trim();
-      const receipt = String((purchase as any)?.transactionReceipt ?? '').trim() || null;
       const transactionId = extractIosTransactionId(purchase);
-
-      console.log('[RNIAP] extracted', { productId, transactionId, hasReceipt: Boolean(receipt) });
 
       const {
         data: { user },
@@ -126,29 +104,32 @@ export function startListeners(): void {
         productRow: null,
       });
 
-      console.log('[RNIAP] grant result', grantRes);
-
       if (!grantRes.ok) {
         // 실패 시 finishTransaction 금지 (pending 유지)
         throw new Error(grantRes.message);
       }
 
-      console.log('[RNIAP] finishTransaction start', { transactionId });
       await finishTransaction(purchase, productId);
-      console.log('[RNIAP] finishTransaction done', { transactionId });
+
+      if (!alertedTransactionIds.has(transactionId)) {
+        alertedTransactionIds.add(transactionId);
+        Alert.alert('결제 완료', '매칭권 지급 완료');
+      }
     } catch (e) {
-      console.log('[RNIAP] purchaseUpdatedListener handler error (NOT finishing)', e);
+      console.error('[RNIAP] purchaseUpdatedListener handler error (NOT finishing)', e);
     }
   });
 
   purchaseErrorSub = purchaseErrorListener((error: PurchaseError) => {
-    console.log('[RNIAP] purchaseErrorListener', error);
+    const code = String((error as any)?.code ?? '').trim();
+    if (code === 'user-cancelled') return;
+    Alert.alert('결제 오류', String((error as any)?.message ?? '결제 중 오류가 발생했습니다.'));
+    console.error('[RNIAP] purchaseErrorListener', error);
   });
 }
 
 export function stopListeners(): void {
   if (Platform.OS !== 'ios') return;
-  console.log('[RNIAP] stopListeners');
   try {
     purchaseUpdatedSub?.remove();
   } catch {}
@@ -164,7 +145,6 @@ export async function finishTransaction(purchase: ProductPurchase, productId?: s
   if (Platform.OS !== 'ios') return;
   const pid = String(productId ?? (purchase as any)?.productId ?? '').trim();
   const isConsumable = getIsConsumable(pid);
-  console.log('[RNIAP] finishTransaction wrapper', { productId: pid, isConsumable });
   await rnFinishTransaction({ purchase, isConsumable } as any);
 }
 

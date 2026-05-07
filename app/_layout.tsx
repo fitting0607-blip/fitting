@@ -35,11 +35,10 @@ export default function RootLayout() {
     if (Platform.OS === 'ios') {
       void (async () => {
         try {
-          const ok = await initRniapConnection();
-          console.log('[RNIAP] initConnection in RootLayout', ok);
+          await initRniapConnection();
           startRniapListeners();
         } catch (e: unknown) {
-          console.log('[RNIAP] init/listeners error in RootLayout', e);
+          console.error('[RNIAP] init/listeners error in RootLayout', e);
         }
       })();
     }

@@ -269,6 +269,15 @@
   - requestPurchase를 v15 형식으로 수정:
     { type: 'in-app', request: { apple: { sku, andDangerouslyFinishTransactionAutomatically: false } } }
   - requestPurchase 직전 디버그 로그 추가
+- RN IAP 전환 후 10개 상품 2회 결제 성공, 매칭권/포인트 지급 정상 확인. 3개/5개 클릭 이슈 별도 확인 필요
+- RN IAP 전환 완료 및 TestFlight 실결제/지급 검증 완료. 디버그 cleanup 코드 제거
+- 앱스토어 제출 전 디버그 코드 전체 정리 완료
+  - Pending Cleanup 버튼 및 clearPendingTransactionsForDebug 제거
+  - expo-in-app-purchases dependency 제거
+  - 디버그 Alert/log 제거, 에러 로그만 유지
+  - 사용하지 않는 ref/state/helper 정리
+  - purchaseErrorListener 사용자 Alert만 유지 (취소는 조용히 처리)
+  - 구매 성공 Alert 유지, 중복 방지 Set 추가
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

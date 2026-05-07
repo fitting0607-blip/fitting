@@ -40,10 +40,6 @@ export default function StoreScreen() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [tab, setTab] = useState<'matching' | 'pt'>('matching');
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
-  const productsRef = useRef<StoreItem[]>([]);
-  const purchasingSkuRef = useRef<string | null>(null);
-  const fetchProductBySkuRef = useRef<(sku: string) => Promise<StoreItem | null>>(async () => null);
-  const loadMyPtRef = useRef<() => Promise<void>>(async () => {});
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
@@ -72,18 +68,6 @@ export default function StoreScreen() {
       bonus_points: typeof (data as any).bonus_points === 'number' ? (data as any).bonus_points : 0,
     } satisfies StoreItem;
   }, []);
-
-  React.useEffect(() => {
-    productsRef.current = products;
-  }, [products]);
-
-  React.useEffect(() => {
-    purchasingSkuRef.current = purchasingSku;
-  }, [purchasingSku]);
-
-  React.useEffect(() => {
-    fetchProductBySkuRef.current = fetchProductBySku;
-  }, [fetchProductBySku]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -268,10 +252,6 @@ export default function StoreScreen() {
     }
   }, []);
 
-  React.useEffect(() => {
-    loadMyPtRef.current = loadMyPt;
-  }, [loadMyPt]);
-
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -300,20 +280,16 @@ export default function StoreScreen() {
         Alert.alert('구매 불가', '상품 정보가 올바르지 않습니다.');
         return;
       }
-      if (purchasingSku) {
-        console.log('[RNIAP] stale purchasingSku reset', purchasingSku);
-        setPurchasingSku(null);
-      }
+      if (purchasingSku) return;
       setPurchasingSku(sku);
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
           return;
         }
-        console.log('[RNIAP] requestPurchase start', sku);
         await requestPurchase(sku);
       } catch (e: any) {
-        console.log('[RNIAP] purchase error', e);
+        console.error('[STORE] purchase error', e);
         Alert.alert('구매 실패', String(e?.message ?? e ?? '구매 중 오류가 발생했습니다.'));
       } finally {
         setPurchasingSku(null);
@@ -345,10 +321,9 @@ export default function StoreScreen() {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
           return;
         }
-        console.log('[RNIAP] requestPurchase start', sku);
         await requestPurchase(sku);
       } catch (e: any) {
-        console.log('[RNIAP] purchase error', e);
+        console.error('[STORE] purchase error', e);
         Alert.alert('구매 실패', String(e?.message ?? e ?? '구매 중 오류가 발생했습니다.'));
       } finally {
         setPurchasingSku(null);
@@ -356,12 +331,6 @@ export default function StoreScreen() {
     },
     [tab, myPtEligible, purchasingSku]
   );
-
-  // Pending Cleanup (expo-in-app-purchases 디버그 버튼)
-  // react-native-iap 전환 완료 후 제거 예정
-  const clearPendingTransactionsForDebug = useCallback(async () => {
-    Alert.alert('안내', 'react-native-iap 전환 완료 후 제거 예정입니다.');
-  }, []);
 
   const formatKRW = useCallback((value: number) => {
     const safe = Number.isFinite(value) ? value : 0;
@@ -433,17 +402,6 @@ export default function StoreScreen() {
             <Text style={[styles.tabText, tab === 'pt' && styles.tabTextActive]}>피티권</Text>
           </Pressable>
         </View>
-
-        {Platform.OS === 'ios' ? (
-          <Pressable
-            onPress={() => void clearPendingTransactionsForDebug()}
-            style={({ pressed }) => [styles.debugBtn, pressed && styles.debugBtnPressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Pending Cleanup"
-          >
-            <Text style={styles.debugBtnText}>Pending Cleanup</Text>
-          </Pressable>
-        ) : null}
 
         <Text style={styles.sectionLabel}>{tab === 'pt' ? '피티권 구매' : '매칭권 구매'}</Text>
 
@@ -774,22 +732,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '600',
-  },
-  debugBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#111827',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
-  },
-  debugBtnPressed: {
-    opacity: 0.9,
-  },
-  debugBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
   },
   productsEmpty: {
     paddingVertical: 14,
