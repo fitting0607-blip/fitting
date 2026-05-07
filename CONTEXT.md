@@ -250,6 +250,8 @@
 - IAP listener Alert 제거: setPurchaseListener 진입 시 Alert 대신 console.log('[IAP LISTENER]', { responseCode, results, errorCode })로 변경
 - IAP premium 미구현 상품 구매 차단: com.hywoo.fitting.ticket_unlimited는 purchaseItemAsync 호출 전 차단하고, listener로 들어온 경우에도 Alert + finishTransactionAsync 후 purchasingSku 해제
 - IAP 디버그 로그 추가 - purchasingSku 중복 차단 로그, getProductsAsync 결과 검증, premium 상품 구매 차단, listener Alert 제거
+- Sandbox/TestFlight pending transaction cleanup debug utility 추가 (운영 자동 실행 금지)
+- IAP Pending Cleanup 디버그 버튼 추가 (TestFlight에서 pending transaction 강제 finish, DB 지급 없음)
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

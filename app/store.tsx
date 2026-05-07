@@ -479,6 +479,51 @@ export default function StoreScreen() {
     [tab, myPtEligible, purchasingSku, ensureIap]
   );
 
+  const clearPendingTransactionsForDebug = useCallback(async () => {
+    try {
+      console.log('[IAP] pending cleanup start');
+
+      if (Platform.OS !== 'ios') {
+        console.log('[IAP] pending cleanup skipped - not ios');
+        return;
+      }
+
+      const ok = await ensureIap();
+
+      if (!ok) {
+        console.log('[IAP] pending cleanup skipped - ensureIap false');
+        return;
+      }
+
+      const history = await InAppPurchases.getPurchaseHistoryAsync();
+
+      console.log('[IAP] purchase history', JSON.stringify(history));
+
+      const results = history?.results ?? [];
+
+      for (const purchase of results) {
+        try {
+          console.log('[IAP] finishing pending purchase', JSON.stringify(purchase));
+
+          await InAppPurchases.finishTransactionAsync(purchase, false);
+        } catch (e) {
+          console.log('[IAP] finishTransaction ignored error', e);
+        }
+      }
+
+      console.log('[IAP] pending transactions cleared');
+
+      Alert.alert('완료', 'Pending transaction cleanup 완료');
+    } catch (e) {
+      console.log('[IAP] pending cleanup error', e);
+
+      Alert.alert(
+        'cleanup error',
+        typeof e === 'object' ? JSON.stringify(e, null, 2) : String(e)
+      );
+    }
+  }, [ensureIap]);
+
   const formatKRW = useCallback((value: number) => {
     const safe = Number.isFinite(value) ? value : 0;
     try {
@@ -873,6 +918,17 @@ export default function StoreScreen() {
           </Pressable>
         </View>
 
+        {Platform.OS === 'ios' ? (
+          <Pressable
+            onPress={() => void clearPendingTransactionsForDebug()}
+            style={({ pressed }) => [styles.debugBtn, pressed && styles.debugBtnPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Pending Cleanup"
+          >
+            <Text style={styles.debugBtnText}>Pending Cleanup</Text>
+          </Pressable>
+        ) : null}
+
         <Text style={styles.sectionLabel}>{tab === 'pt' ? '피티권 구매' : '매칭권 구매'}</Text>
 
         {tab === 'pt' && !myPtLoading && !myPtEligible ? (
@@ -1207,6 +1263,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '600',
+  },
+  debugBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#111827',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  debugBtnPressed: {
+    opacity: 0.9,
+  },
+  debugBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
   productsEmpty: {
     paddingVertical: 14,
