@@ -172,8 +172,10 @@ export default function MapScreen() {
         .select(
           'id, user_id, facility_name, facility_addr, facility_addr_detail, intro, latitude, longitude, status, is_approved, facility_images, cert_images, profile_images'
         )
-        // 등록 완료(노출): status='approved' AND is_approved=true. 레거시 데이터(status='paid')도 노출 유지.
-        .or('and(status.eq.approved,is_approved.eq.true),status.eq.paid');
+        .eq('is_approved', true)
+        // Note: lat/lng null rows are excluded from markers below,
+        // but we still keep them in list as they are valid trainers.
+        .order('updated_at', { ascending: false });
 
       if (error) throw error;
 
@@ -557,16 +559,34 @@ export default function MapScreen() {
               const lat = parseCoord(t.latitude)!;
               const lng = parseCoord(t.longitude)!;
               const title = nicknames[t.user_id] ?? '트레이너';
+              const thumb = t.profile_images?.[0] ?? null;
               return (
                 <Marker
                   key={t.id}
                   coordinate={{ latitude: lat, longitude: lng }}
                   title={title}
                   description={t.facility_name ?? undefined}
-                  onCalloutPress={() =>
+                  onPress={() =>
                     router.push({ pathname: '/trainer-detail', params: { id: t.id } } as unknown as Href)
                   }
-                />
+                >
+                  <View style={styles.trainerMarkerWrap}>
+                    <View style={styles.trainerMarkerRing}>
+                      {thumb ? (
+                        <Image
+                          source={{ uri: thumb }}
+                          style={styles.trainerMarkerImg}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={styles.trainerMarkerFallback}>
+                          <Feather name="user" size={18} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.trainerMarkerPointer} />
+                  </View>
+                </Marker>
               );
             })}
           </MapView>
@@ -1042,5 +1062,45 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     fontSize: 13,
     color: '#6B7280',
+  },
+
+  trainerMarkerWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trainerMarkerRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: MAIN,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  trainerMarkerImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  trainerMarkerFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: MAIN,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trainerMarkerPointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: MAIN,
+    marginTop: -2,
   },
 });

@@ -295,6 +295,11 @@
 - 채팅 읽음 처리 (채팅방 진입 시 읽음, 목록 뱃지 사라짐)
 - 지도 탭 (구글맵, 내 위치, 지역 검색, 트레이너 목록 바텀시트)
   - (2026-04-23) 지도 탭 검색 기능 수정 (Google Places API 키 fallback 처리)
+  - 지도 탭 트레이너 마커 표시 추가
+    - is_approved=true 트레이너 위치를 지도에 마커로 표시
+    - 마커에 트레이너 profile_images[0] 원형 썸네일 표시 (없으면 기본 아이콘)
+    - 마커 탭 시 trainer-detail 화면으로 이동
+    - latitude/longitude null인 트레이너 제외
 - 지도 Google Maps API 키 주입 경로 수정
   - ios.googleMapsApiKey → ios.config.googleMapsApiKey
   - android.googleMaps.apiKey → android.config.googleMaps.apiKey
