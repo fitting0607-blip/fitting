@@ -255,6 +255,15 @@
 - IAP 디버그 로그 추가 - purchasingSku 중복 차단 로그, getProductsAsync 결과 검증, premium 상품 구매 차단, listener Alert 제거
 - Sandbox/TestFlight pending transaction cleanup debug utility 추가 (운영 자동 실행 금지)
 - IAP Pending Cleanup 디버그 버튼 추가 (TestFlight에서 pending transaction 강제 finish, DB 지급 없음)
+- expo-in-app-purchases → react-native-iap 전환 완료
+  - iap/productIds.ts: 상품 ID 목록 + 티켓 수량 매핑
+  - iap/grant.ts: DB 지급/transactionId 중복 방지 로직 분리
+  - iap/rniap.ts: initConnection, getProducts, requestPurchase, purchaseUpdatedListener, finishTransaction 구현
+  - app/_layout.tsx: 루트 레벨에서 initConnection + startListeners 등록
+  - app/store.tsx: requestPurchase 호출만 하도록 교체, expo-in-app-purchases 제거
+  - DB 지급 성공 후에만 finishTransaction 호출
+  - transactionId 중복 지급 방지 유지
+  - git tag: backup-expo-iap-2026-05-07 (롤백 포인트)
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

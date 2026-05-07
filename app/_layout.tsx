@@ -1,5 +1,4 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import * as InAppPurchases from 'expo-in-app-purchases';
 import { Redirect, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -10,6 +9,7 @@ import MobileAds from 'react-native-google-mobile-ads';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { attachNotificationResponseHandler, ensureExpoNotificationHandlerInstalled, registerAndSavePushToken } from '@/app/utils/push';
+import { initConnection as initRniapConnection, startListeners as startRniapListeners, endConnection as endRniapConnection } from '@/iap/rniap';
 import { supabase } from '../supabase';
 
 export const unstable_settings = {
@@ -35,12 +35,11 @@ export default function RootLayout() {
     if (Platform.OS === 'ios') {
       void (async () => {
         try {
-          await InAppPurchases.connectAsync();
+          const ok = await initRniapConnection();
+          console.log('[RNIAP] initConnection in RootLayout', ok);
+          startRniapListeners();
         } catch (e: unknown) {
-          const msg = String((e as { message?: string })?.message ?? e ?? '');
-          if (!msg.includes('Already connected')) {
-            // 연결 실패는 상점 진입 시 ensureIap에서 재시도
-          }
+          console.log('[RNIAP] init/listeners error in RootLayout', e);
         }
       })();
     }
@@ -71,6 +70,8 @@ export default function RootLayout() {
     return () => {
       mounted = false;
       authListener.subscription.unsubscribe();
+      // best-effort cleanup
+      void endRniapConnection();
     };
   }, []);
 

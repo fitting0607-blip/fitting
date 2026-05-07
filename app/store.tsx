@@ -1,8 +1,6 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import * as InAppPurchases from 'expo-in-app-purchases';
-import { IAPResponseCode } from 'expo-in-app-purchases';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,22 +15,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
+import { requestPurchase } from '@/iap/rniap';
 
 const MAIN = '#6C47FF';
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms)
-    ),
-  ]);
-}
-
-function isTimeoutError(e: unknown): boolean {
-  const msg = String((e as any)?.message ?? e ?? '');
-  return msg.includes('timeout after');
-}
 
 type StoreItem = {
   id: string;
@@ -54,11 +39,7 @@ export default function StoreScreen() {
   const [products, setProducts] = useState<StoreItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [tab, setTab] = useState<'matching' | 'pt'>('matching');
-  const [iapReady, setIapReady] = useState(false);
-  const [iapLoading, setIapLoading] = useState(false);
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
-  const iapConnectPromiseRef = useRef<Promise<boolean> | null>(null);
-  const listenerRegisteredRef = useRef(false);
   const productsRef = useRef<StoreItem[]>([]);
   const purchasingSkuRef = useRef<string | null>(null);
   const fetchProductBySkuRef = useRef<(sku: string) => Promise<StoreItem | null>>(async () => null);
@@ -254,41 +235,6 @@ export default function StoreScreen() {
     }
   }, []);
 
-  const ensureIap = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS !== 'ios') return false;
-    if (iapReady) return true;
-    if (iapConnectPromiseRef.current) return await iapConnectPromiseRef.current;
-
-    const p = (async (): Promise<boolean> => {
-      setIapLoading(true);
-      try {
-        console.log('[IAP] connectAsync start');
-        await withTimeout(InAppPurchases.connectAsync(), 8000, 'connectAsync');
-        console.log('[IAP] connectAsync success');
-        setIapReady(true);
-        return true;
-      } catch (e: unknown) {
-        const msg = String((e as { message?: string })?.message ?? e ?? '');
-        console.log('[IAP] connectAsync error', msg);
-        if (msg.includes('Already connected')) {
-          setIapReady(true);
-          return true;
-        }
-        setIapReady(false);
-        iapConnectPromiseRef.current = null;
-        Alert.alert('[IAP] connectAsync error', String(e));
-        throw e;
-      } finally {
-        setIapLoading(false);
-        iapConnectPromiseRef.current = null;
-        console.log('[IAP] connectAsync done');
-      }
-    })();
-
-    iapConnectPromiseRef.current = p;
-    return await p;
-  }, [iapReady, iapLoading]);
-
   const loadMyPt = useCallback(async () => {
     setMyPtLoading(true);
     try {
@@ -355,7 +301,7 @@ export default function StoreScreen() {
         return;
       }
       if (purchasingSku) {
-        console.log('[IAP] stale purchasingSku reset', purchasingSku);
+        console.log('[RNIAP] stale purchasingSku reset', purchasingSku);
         setPurchasingSku(null);
       }
       setPurchasingSku(sku);
@@ -364,54 +310,16 @@ export default function StoreScreen() {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
           return;
         }
-
-        console.log('[IAP] before ensureIap');
-        const ok = await withTimeout(ensureIap(), 8000, 'ensureIap');
-        console.log('[IAP] after ensureIap', ok);
-        if (!ok) {
-          Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
-          return;
-        }
-
-        console.log('[IAP] getProductsAsync([sku]) start', sku);
-
-        const productRes = await withTimeout(
-          InAppPurchases.getProductsAsync([sku]),
-          8000,
-          'getProductsAsync'
-        );
-
-        console.log('[IAP] getProductsAsync result', JSON.stringify(productRes));
-
-        const productResults = productRes?.results ?? [];
-        console.log('[IAP] responseCode', productRes?.responseCode);
-
-        if (!productResults.length) {
-          Alert.alert(
-            '상품 조회 실패',
-            `App Store에서 상품을 찾지 못했습니다.\nsku: ${sku}\nresponseCode: ${productRes?.responseCode}`
-          );
-          return;
-        }
-
-        console.log('[IAP] purchaseItemAsync start', sku);
-        console.log('[IAP] listenerRegisteredRef', listenerRegisteredRef.current);
-        await InAppPurchases.purchaseItemAsync(sku);
+        console.log('[RNIAP] requestPurchase start', sku);
+        await requestPurchase(sku);
       } catch (e: any) {
-        console.log('[IAP] error raw', e);
-        if (isTimeoutError(e)) {
-          Alert.alert(
-            '구매 지연',
-            '인앱결제 연결이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'
-          );
-        } else {
-          Alert.alert('[IAP] error', typeof e === 'object' ? JSON.stringify(e, null, 2) : String(e));
-        }
+        console.log('[RNIAP] purchase error', e);
+        Alert.alert('구매 실패', String(e?.message ?? e ?? '구매 중 오류가 발생했습니다.'));
       } finally {
         setPurchasingSku(null);
       }
     },
-    [tab, purchasingSku, ensureIap]
+    [tab, purchasingSku]
   );
 
   const onBuyPtTicket = useCallback(
@@ -437,101 +345,23 @@ export default function StoreScreen() {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
           return;
         }
-
-        const ok = await withTimeout(ensureIap(), 8000, 'ensureIap');
-        if (!ok) {
-          Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
-          return;
-        }
-
-        console.log('[IAP] getProductsAsync([sku]) start', sku);
-
-        const productRes = await withTimeout(
-          InAppPurchases.getProductsAsync([sku]),
-          8000,
-          'getProductsAsync'
-        );
-
-        console.log('[IAP] getProductsAsync result', JSON.stringify(productRes));
-
-        const productResults = productRes?.results ?? [];
-
-        if (!productResults.length) {
-          Alert.alert(
-            '상품 조회 실패',
-            `App Store에서 상품을 찾지 못했습니다.\nsku: ${sku}\nresponseCode: ${productRes?.responseCode}`
-          );
-          return;
-        }
-
-        console.log('[IAP] purchaseItemAsync start', sku);
-
-        const purchaseRes = await withTimeout(
-          InAppPurchases.purchaseItemAsync(sku),
-          15000,
-          'purchaseItemAsync'
-        );
-
-        console.log('[IAP] purchaseItemAsync result', JSON.stringify(purchaseRes));
+        console.log('[RNIAP] requestPurchase start', sku);
+        await requestPurchase(sku);
       } catch (e: any) {
-        if (isTimeoutError(e)) {
-          Alert.alert(
-            '구매 지연',
-            '인앱결제 연결이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'
-          );
-        }
-        Alert.alert('[IAP] error', String(e));
+        console.log('[RNIAP] purchase error', e);
+        Alert.alert('구매 실패', String(e?.message ?? e ?? '구매 중 오류가 발생했습니다.'));
       } finally {
         setPurchasingSku(null);
       }
     },
-    [tab, myPtEligible, purchasingSku, ensureIap]
+    [tab, myPtEligible, purchasingSku]
   );
 
+  // Pending Cleanup (expo-in-app-purchases 디버그 버튼)
+  // react-native-iap 전환 완료 후 제거 예정
   const clearPendingTransactionsForDebug = useCallback(async () => {
-    try {
-      console.log('[IAP] pending cleanup start');
-
-      if (Platform.OS !== 'ios') {
-        console.log('[IAP] pending cleanup skipped - not ios');
-        return;
-      }
-
-      const ok = await ensureIap();
-
-      if (!ok) {
-        console.log('[IAP] pending cleanup skipped - ensureIap false');
-        return;
-      }
-
-      const history = await InAppPurchases.getPurchaseHistoryAsync();
-
-      console.log('[IAP] purchase history', JSON.stringify(history));
-
-      const results = history?.results ?? [];
-
-      for (const purchase of results) {
-        try {
-          console.log('[IAP] finishing pending purchase', JSON.stringify(purchase));
-
-          await InAppPurchases.finishTransactionAsync(purchase, false);
-        } catch (e) {
-          console.log('[IAP] finishTransaction ignored error', e);
-        }
-      }
-
-      console.log('[IAP] pending transactions cleared');
-
-      Alert.alert('완료', 'Pending transaction cleanup 완료');
-    } catch (e) {
-      console.log('[IAP] pending cleanup error', e);
-
-      Alert.alert(
-        'cleanup error',
-        typeof e === 'object' ? JSON.stringify(e, null, 2) : String(e)
-      );
-    }
-  }, [ensureIap]);
+    Alert.alert('안내', 'react-native-iap 전환 완료 후 제거 예정입니다.');
+  }, []);
 
   const formatKRW = useCallback((value: number) => {
     const safe = Number.isFinite(value) ? value : 0;
@@ -544,382 +374,7 @@ export default function StoreScreen() {
 
   const hasAnyProducts = products.length > 0;
   const productsEmpty = useMemo(() => !productsLoading && !hasAnyProducts, [productsLoading, hasAnyProducts]);
-  const showIapProductList = Platform.OS !== 'ios' || iapReady;
-
-  React.useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    console.log('[IAP] listener useEffect mount');
-
-    if (listenerRegisteredRef.current) return;
-    let mounted = true;
-
-    const TICKET_QTY_BY_PRODUCT_ID: Record<string, number> = {
-      'com.hywoo.fitting.ticket_3': 3,
-      'com.hywoo.fitting.ticket_5': 5,
-      'com.hywoo.fitting.ticket_10': 10,
-      'com.hywoo.fitting.ticket_30': 30,
-      'com.hywoo.fitting.ticket_50': 50,
-    };
-
-    console.log('[IAP] listener registered');
-    listenerRegisteredRef.current = true;
-
-    InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
-      Alert.alert(
-        '[IAP] listener received',
-        `responseCode=${String(responseCode)}\nresults=${String(results?.length ?? 0)}`
-      );
-      console.log(
-        '[IAP] purchase listener event',
-        JSON.stringify({
-          responseCode,
-          errorCode,
-          resultsLength: results?.length,
-        })
-      );
-
-      if (!mounted) return;
-
-      try {
-        console.log('[IAP] responseCode', responseCode);
-        console.log('[IAP] results.length', Array.isArray(results) ? results.length : 0);
-
-      const insertPayment = async (
-        payload: {
-          user_id: string;
-          product_id: string | null;
-          product_title: string | null;
-          amount: number | null;
-          status: string;
-          transaction_id: string | null;
-        },
-        debug?: { state?: unknown }
-      ) => {
-        if (!payload.transaction_id) {
-          Alert.alert('transactionId is null', `state=${String(debug?.state ?? '')}`);
-        }
-        console.log('[payments] insert payload', payload);
-        const { error } = await supabase.from('payments').insert(payload);
-        if (error) {
-          Alert.alert(JSON.stringify(error));
-          return { ok: false as const, error };
-        }
-        return { ok: true as const, error: null };
-      };
-
-      // cancelled
-      if (responseCode === (InAppPurchases as any).IAPResponseCode?.USER_CANCELED) {
-        try {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          if (user?.id) {
-            const skuRef = (purchasingSku ?? '').trim();
-            const item =
-              products.find((p) => p.apple_product_id.trim() === skuRef) ?? null;
-            await insertPayment({
-              user_id: user.id,
-              product_id: item?.id ?? null,
-              product_title: (item?.title ?? skuRef) || 'IAP',
-              amount: typeof item?.price === 'number' ? item.price : null,
-              status: 'cancelled',
-              transaction_id: null,
-            }, { state: 'USER_CANCELED' });
-          }
-        } catch {
-          // ignore
-        }
-        setPurchasingSku(null);
-        Alert.alert('결제 취소', '결제가 취소되었습니다.');
-        return;
-      }
-
-      // generic error
-      if (
-        responseCode !== (InAppPurchases as any).IAPResponseCode?.OK
-      ) {
-        try {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          if (user?.id) {
-            const skuRef = (purchasingSku ?? '').trim();
-            const item =
-              products.find((p) => p.apple_product_id.trim() === skuRef) ?? null;
-            await insertPayment({
-              user_id: user.id,
-              product_id: item?.id ?? null,
-              product_title: (item?.title ?? skuRef) || 'IAP',
-              amount: typeof item?.price === 'number' ? item.price : null,
-              status: 'failed',
-              transaction_id: null,
-            }, { state: `IAPResponseCode=${String(responseCode)}` });
-          }
-        } catch {
-          // ignore
-        }
-        setPurchasingSku(null);
-        Alert.alert('결제 실패', errorCode ? String(errorCode) : '결제 처리 중 오류가 발생했습니다.');
-        return;
-      }
-
-      const purchases = Array.isArray(results) ? results : [];
-      if (purchases.length === 0) {
-        setPurchasingSku(null);
-        return;
-      }
-
-      for (const purchase of purchases) {
-        try {
-          const purchaseState = (purchase as any)?.purchaseState;
-          const productId = String((purchase as any)?.productId ?? '').trim();
-          const transactionId = String(
-            (purchase as any)?.transactionId ??
-              (purchase as any)?.transactionID ??
-              (purchase as any)?.orderId ??
-              ''
-          ).trim();
-          Alert.alert(
-            '[IAP] purchase item',
-            `productId=${productId}\ntransactionId=${transactionId}\npurchaseState=${String(purchaseState)}`
-          );
-
-          console.log('[IAP] productId', productId);
-          console.log('[IAP] transactionId', transactionId);
-          console.log('[IAP] purchaseState', purchaseState);
-          console.log('[IAP] processing purchase start', transactionId);
-
-          if (productId && !(productId in TICKET_QTY_BY_PRODUCT_ID)) {
-            Alert.alert('[IAP] unmapped productId', productId);
-          }
-
-          const purchaseStateEnum = (InAppPurchases as any).IAPPurchaseState;
-          const purchased =
-            purchaseState === purchaseStateEnum?.PURCHASED ||
-            purchaseState === purchaseStateEnum?.RESTORED ||
-            purchaseState === 0 ||
-            purchaseState === 1 ||
-            purchaseState == null;
-
-          // productId가 매핑된 상품일 때만 지급 처리
-          const isKnownProductId =
-            productId in TICKET_QTY_BY_PRODUCT_ID ||
-            productId === 'com.hywoo.fitting.ticket_unlimited' ||
-            productId === 'com.hywoo.fitting.trainer_30';
-
-          if (!productId || !isKnownProductId) {
-            console.log('[IAP] unknown/empty productId, skip grant', {
-              productId,
-              purchaseState,
-            });
-            setPurchasingSku(null);
-            continue;
-          }
-
-          // pending transaction도 처리되도록 purchased 판별을 완화
-          if (!purchased) {
-            console.log('[IAP] not purchased/restored, skip grant', { productId, purchaseState });
-            setPurchasingSku(null);
-            continue;
-          }
-
-          const item =
-            productsRef.current.find((p) => p.apple_product_id.trim() === productId) ??
-            productsRef.current.find((p) => p.id === productId) ??
-            (await fetchProductBySkuRef.current(productId));
-
-          const {
-            data: { user },
-            error: authError,
-          } = await supabase.auth.getUser();
-          if (authError) throw authError;
-          if (!user?.id) throw new Error('로그인이 필요합니다.');
-
-          if (!item) {
-            setPurchasingSku(null);
-            Alert.alert(
-              '안내',
-              '상품 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'
-            );
-            continue;
-          }
-
-          const category = item.category;
-          if (productId === 'com.hywoo.fitting.ticket_unlimited') {
-            // premium (별도 처리)
-            console.log('[IAP] premium product detected, handled separately', productId);
-            console.error('[IAP] premium grant not implemented yet');
-            Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
-            console.log('[IAP] finishTransaction start', transactionId);
-            await InAppPurchases.finishTransactionAsync(purchase, false);
-            console.log('[IAP] finishTransaction done', transactionId);
-            setPurchasingSku(null);
-            continue;
-          }
-
-          // 중복 transactionId 방지: payments에 동일 transaction_id가 있으면 지급 스킵
-          if (transactionId) {
-            const { data: existing, error: dupErr } = await supabase
-              .from('payments')
-              .select('id')
-              // @ts-ignore: DB 컬럼이 실제로 존재해야 함 (transaction_id)
-              .eq('transaction_id', transactionId)
-              .limit(1);
-            if (dupErr) throw dupErr;
-            if ((existing?.length ?? 0) > 0) {
-              console.log('[IAP] duplicate transactionId, skip grant', transactionId);
-              console.log('[IAP] finishTransaction start', transactionId);
-              await InAppPurchases.finishTransactionAsync(purchase, false);
-              console.log('[IAP] finishTransaction done', transactionId);
-              setPurchasingSku(null);
-              continue;
-            }
-          }
-
-          // 1) payments INSERT
-          {
-            const payload = {
-              user_id: user.id,
-              product_id: item?.id ?? null,
-              product_title: item?.title ?? productId,
-              amount: typeof item?.price === 'number' ? item.price : null,
-              status: 'succeeded',
-              transaction_id: transactionId || null,
-            };
-            const res = await insertPayment(payload, { state: purchaseState });
-            if (!res.ok) {
-              console.log('payment insert error');
-              console.error(res.error);
-              setPurchasingSku(null);
-              continue;
-            }
-            console.log('payment insert success');
-          }
-
-          if (productId === 'com.hywoo.fitting.trainer_30' || category === 'pt_ticket') {
-            // 피티권(별도 처리): trainer_profiles 최신 1건 is_approved=true
-            const { data: latestProfile, error: profErr } = await supabase
-              .from('trainer_profiles')
-              .select('id')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            if (profErr) throw profErr;
-            const profileId = (latestProfile as any)?.id;
-            if (!profileId) throw new Error('트레이너 신청 정보를 찾을 수 없습니다.');
-
-            const { error: upErr } = await supabase
-              .from('trainer_profiles')
-              .update({ is_approved: true })
-              .eq('id', profileId);
-            if (upErr) {
-              console.log('user update error');
-              console.error(upErr);
-              setPurchasingSku(null);
-              continue;
-            }
-            console.log('user update success');
-
-            console.log('[IAP] finishTransaction start', transactionId);
-            await InAppPurchases.finishTransactionAsync(purchase, false);
-            console.log('[IAP] finishTransaction done', transactionId);
-
-            void loadMyPtRef.current();
-            setPurchasingSku(null);
-            Alert.alert('결제 완료', '피티권 결제가 완료됐어요.');
-            continue;
-          }
-
-          // 매칭권: productId별 수량 매핑 우선
-          const addTicketsFromMap = TICKET_QTY_BY_PRODUCT_ID[productId];
-          const addTickets = Math.max(0, typeof addTicketsFromMap === 'number' ? addTicketsFromMap : (item?.ticket_count ?? 0));
-          const addPoints = Math.max(0, item?.bonus_points ?? 0);
-
-          // 2) point_logs INSERT (보너스 포인트가 있을 때만)
-          if (addPoints > 0) {
-            const { error: logErr } = await supabase.from('point_logs').insert({
-              user_id: user.id,
-              amount: addPoints,
-              reason: 'ticket_purchase_bonus',
-            });
-            if (logErr) {
-              console.log('user update error');
-              console.error(logErr);
-              setPurchasingSku(null);
-              continue;
-            }
-          }
-
-          // 3) users.matching_tickets UPDATE (+ bonus points if any)
-          const { data: me, error: meError } = await supabase
-            .from('users')
-            .select('points,matching_tickets')
-            .eq('id', user.id)
-            .maybeSingle();
-          if (meError) throw meError;
-
-          const curTickets =
-            typeof (me as any)?.matching_tickets === 'number' ? (me as any).matching_tickets : 0;
-          const curPoints = typeof (me as any)?.points === 'number' ? (me as any).points : 0;
-
-          const { error: upErr } = await supabase
-            .from('users')
-            .update({
-              matching_tickets: curTickets + addTickets,
-              ...(addPoints > 0 ? { points: curPoints + addPoints } : {}),
-            })
-            .eq('id', user.id);
-          if (upErr) {
-            console.log('user update error');
-            console.error(upErr);
-            setPurchasingSku(null);
-            continue;
-          }
-          console.log('user update success');
-
-          console.log('[IAP] finishTransaction start', transactionId);
-          await InAppPurchases.finishTransactionAsync(purchase, false);
-          console.log('[IAP] finishTransaction done', transactionId);
-
-          setPoints(curPoints + addPoints);
-          setMatchingTickets(curTickets + addTickets);
-          setPurchasingSku(null);
-          Alert.alert('결제 완료', '매칭권 지급 완료');
-        } catch (e: any) {
-          setPurchasingSku(null);
-          console.error(e);
-          Alert.alert(
-            '[IAP] grant error',
-            typeof e === 'object' ? JSON.stringify(e, null, 2) : String(e)
-          );
-        } finally {
-          const transactionId = String(
-            (purchase as any)?.transactionId ??
-              (purchase as any)?.transactionID ??
-              (purchase as any)?.orderId ??
-              ''
-          ).trim();
-          console.log('[IAP] processing purchase end', transactionId);
-        }
-      }
-      } catch (e) {
-        console.log('[IAP] listener error', e);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      console.log('[IAP] listener cleanup');
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    // listener 등록 이후 connectAsync가 되도록 순서 보장
-    if (!listenerRegisteredRef.current) return;
-    void withTimeout(ensureIap(), 8000, 'ensureIap');
-  }, [ensureIap]);
+  // react-native-iap purchaseUpdatedListener는 app/_layout.tsx에서 앱 루트 레벨에 등록됨
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -998,12 +453,7 @@ export default function StoreScreen() {
           </View>
         ) : null}
 
-        {Platform.OS === 'ios' && !showIapProductList ? (
-          <View style={styles.productsLoading}>
-            <ActivityIndicator size="small" color={MAIN} />
-            <Text style={styles.productsLoadingText}>결제 준비 중…</Text>
-          </View>
-        ) : productsLoading ? (
+        {productsLoading ? (
           <View style={styles.productsLoading}>
             <ActivityIndicator size="small" color={MAIN} />
             <Text style={styles.productsLoadingText}>상품 불러오는 중…</Text>
