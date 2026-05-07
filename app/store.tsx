@@ -58,6 +58,11 @@ export default function StoreScreen() {
   const [iapLoading, setIapLoading] = useState(false);
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
   const iapConnectPromiseRef = useRef<Promise<boolean> | null>(null);
+  const listenerRegisteredRef = useRef(false);
+  const productsRef = useRef<StoreItem[]>([]);
+  const purchasingSkuRef = useRef<string | null>(null);
+  const fetchProductBySkuRef = useRef<(sku: string) => Promise<StoreItem | null>>(async () => null);
+  const loadMyPtRef = useRef<() => Promise<void>>(async () => {});
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
@@ -86,6 +91,18 @@ export default function StoreScreen() {
       bonus_points: typeof (data as any).bonus_points === 'number' ? (data as any).bonus_points : 0,
     } satisfies StoreItem;
   }, []);
+
+  React.useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
+
+  React.useEffect(() => {
+    purchasingSkuRef.current = purchasingSku;
+  }, [purchasingSku]);
+
+  React.useEffect(() => {
+    fetchProductBySkuRef.current = fetchProductBySku;
+  }, [fetchProductBySku]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -305,6 +322,10 @@ export default function StoreScreen() {
     }
   }, []);
 
+  React.useEffect(() => {
+    loadMyPtRef.current = loadMyPt;
+  }, [loadMyPt]);
+
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -320,11 +341,6 @@ export default function StoreScreen() {
   );
 
   const goBack = useCallback(() => router.back(), [router]);
-
-  React.useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    void withTimeout(ensureIap(), 8000, 'ensureIap');
-  }, [ensureIap]);
 
   const onBuyMatchingTicket = useCallback(
     async (item: StoreItem) => {
@@ -379,6 +395,7 @@ export default function StoreScreen() {
         }
 
         console.log('[IAP] purchaseItemAsync start', sku);
+        console.log('[IAP] listenerRegisteredRef', listenerRegisteredRef.current);
         await InAppPurchases.purchaseItemAsync(sku);
       } catch (e: any) {
         console.log('[IAP] error raw', e);
@@ -531,6 +548,9 @@ export default function StoreScreen() {
 
   React.useEffect(() => {
     if (Platform.OS !== 'ios') return;
+    console.log('[IAP] listener useEffect mount');
+
+    if (listenerRegisteredRef.current) return;
     let mounted = true;
 
     const TICKET_QTY_BY_PRODUCT_ID: Record<string, number> = {
@@ -542,6 +562,7 @@ export default function StoreScreen() {
     };
 
     console.log('[IAP] listener registered');
+    listenerRegisteredRef.current = true;
 
     InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
       Alert.alert(
@@ -703,9 +724,9 @@ export default function StoreScreen() {
           }
 
           const item =
-            products.find((p) => p.apple_product_id.trim() === productId) ??
-            products.find((p) => p.id === productId) ??
-            (await fetchProductBySku(productId));
+            productsRef.current.find((p) => p.apple_product_id.trim() === productId) ??
+            productsRef.current.find((p) => p.id === productId) ??
+            (await fetchProductBySkuRef.current(productId));
 
           const {
             data: { user },
@@ -804,7 +825,7 @@ export default function StoreScreen() {
             await InAppPurchases.finishTransactionAsync(purchase, false);
             console.log('[IAP] finishTransaction done', transactionId);
 
-            void loadMyPt();
+            void loadMyPtRef.current();
             setPurchasingSku(null);
             Alert.alert('결제 완료', '피티권 결제가 완료됐어요.');
             continue;
@@ -889,14 +910,16 @@ export default function StoreScreen() {
 
     return () => {
       mounted = false;
-      try {
-        // expo-in-app-purchases는 remove API가 없어서 listener를 빈 함수로 덮어씌움
-        InAppPurchases.setPurchaseListener(() => {});
-      } catch {
-        // ignore
-      }
+      console.log('[IAP] listener cleanup');
     };
-  }, [products, purchasingSku, loadMyPt, fetchProductBySku]);
+  }, []);
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    // listener 등록 이후 connectAsync가 되도록 순서 보장
+    if (!listenerRegisteredRef.current) return;
+    void withTimeout(ensureIap(), 8000, 'ensureIap');
+  }, [ensureIap]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
