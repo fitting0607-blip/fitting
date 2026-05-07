@@ -3,6 +3,7 @@ import {
   endConnection as rnEndConnection,
   fetchProducts as rnFetchProducts,
   finishTransaction as rnFinishTransaction,
+  getAvailablePurchases as rnGetAvailablePurchases,
   initConnection as rnInitConnection,
   purchaseErrorListener,
   purchaseUpdatedListener,
@@ -67,6 +68,115 @@ function debugIapAlert(transactionId: string, step: string, detail?: string): vo
   }
 }
 
+type ProcessResult =
+  | { status: 'no_session'; transactionId: string; productId: string }
+  | { status: 'grant_failed'; transactionId: string; productId: string; message: string; kind?: string }
+  | { status: 'duplicate_finished'; transactionId: string; productId: string }
+  | { status: 'finished'; transactionId: string; productId: string };
+
+async function processPurchaseLikeListener(purchase: Purchase, source: string): Promise<ProcessResult> {
+  const productId = String((purchase as any)?.productId ?? '').trim();
+  const transactionId = extractIosTransactionId(purchase);
+
+  debugIapAlert(transactionId, 'listener received', `source=${source}\nproductId=${productId || '(missing)'}`);
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user?.id) {
+    debugIapAlert(
+      transactionId,
+      'userId missing',
+      `source=${source}\nproductId=${productId || '(missing)'}\nauthError=${String((authError as any)?.message ?? '')}`
+    );
+    console.log('[RNIAP] skip purchase update without auth session', {
+      transactionId,
+      productId,
+      source,
+      authErrorMessage: String((authError as any)?.message ?? ''),
+    });
+    return { status: 'no_session', transactionId, productId };
+  }
+
+  debugIapAlert(transactionId, 'userId ok', `source=${source}\nuserId=${user.id}`);
+  debugIapAlert(transactionId, 'grant start', `source=${source}`);
+
+  const grantRes = await grantAppleIapAndRecord({
+    userId: user.id,
+    productId,
+    transactionId,
+    productRow: null,
+  });
+
+  debugIapAlert(
+    transactionId,
+    'grant result',
+    `source=${source}\nok=${String((grantRes as any)?.ok)} kind=${String((grantRes as any)?.kind ?? '')}`
+  );
+
+  if (!grantRes.ok) {
+    // duplicate 결과는 지급 스킵 + finishTransaction 가능 (이미 DB 기록 있음)
+    if (grantRes.kind === 'duplicate' || isDuplicateLikeError({ message: grantRes.message })) {
+      console.log('[RNIAP] duplicate skipped', {
+        reason: 'grant duplicate',
+        transactionId,
+        productId,
+        source,
+        message: grantRes.message,
+      });
+
+      debugIapAlert(transactionId, 'finish start', `source=${source}\nreason=duplicate`);
+      try {
+        await finishTransaction(purchase, productId);
+        debugIapAlert(transactionId, 'finish done', `source=${source}\nreason=duplicate`);
+      } catch (finishErr: any) {
+        console.error('[RNIAP] finishTransaction failed after duplicate grant', finishErr);
+        debugIapAlert(
+          transactionId,
+          'finish error',
+          `source=${source}\nreason=duplicate\n${String(finishErr?.message ?? finishErr ?? 'finishTransaction error')}`
+        );
+        Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
+        // duplicate인데 finish 실패하면 pending이 계속될 수 있으니 결과는 duplicate_finished로는 처리하지 않음
+        throw finishErr;
+      }
+
+      processedTransactionIds.add(transactionId);
+      return { status: 'duplicate_finished', transactionId, productId };
+    }
+
+    // 실제 DB 지급 실패만 Alert (pending 유지: finishTransaction 호출 금지)
+    const kind = String((grantRes as any)?.kind ?? '');
+    const message = String(grantRes.message ?? '결제 처리 중 오류가 발생했습니다.');
+    console.error('[RNIAP] grant failed (NOT finishing)', { ...grantRes, source });
+    Alert.alert('결제 처리 실패', `source=${source}\nkind=${kind}\n${message}`);
+    return { status: 'grant_failed', transactionId, productId, message, kind };
+  }
+
+  // DB 지급 성공 후에만 finishTransaction
+  debugIapAlert(transactionId, 'finish start', `source=${source}`);
+  try {
+    await finishTransaction(purchase, productId);
+    debugIapAlert(transactionId, 'finish done', `source=${source}`);
+  } catch (finishErr: any) {
+    console.error('[RNIAP] finishTransaction failed after grant', finishErr);
+    debugIapAlert(transactionId, 'finish error', `source=${source}\n${String(finishErr?.message ?? finishErr ?? 'finishTransaction error')}`);
+    Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
+    throw finishErr;
+  }
+
+  processedTransactionIds.add(transactionId);
+
+  if (!alertedTransactionIds.has(transactionId)) {
+    alertedTransactionIds.add(transactionId);
+    const doneMsg = productId === 'com.hywoo.fitting.trainer_30' ? '피티권 지급 완료' : '매칭권 지급 완료';
+    Alert.alert('결제 완료', doneMsg);
+  }
+
+  return { status: 'finished', transactionId, productId };
+}
+
 export async function initConnection(): Promise<boolean> {
   if (Platform.OS !== 'ios') {
     return false;
@@ -115,6 +225,75 @@ export async function fetchProducts(productIds: readonly string[] = getAllAppleP
   }
 }
 
+export async function getAvailablePurchases(): Promise<Purchase[]> {
+  if (Platform.OS !== 'ios') return [];
+  try {
+    const ok = await initConnection();
+    if (!ok) {
+      Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
+      return [];
+    }
+    const list = (await rnGetAvailablePurchases()) as Purchase[] | null | undefined;
+    return (list ?? []) as Purchase[];
+  } catch (e) {
+    console.error('[RNIAP] getAvailablePurchases error', e);
+    Alert.alert('결제 오류', String((e as any)?.message ?? e ?? 'getAvailablePurchases error'));
+    return [];
+  }
+}
+
+export async function debugReprocessPendingPurchases(): Promise<void> {
+  if (Platform.OS !== 'ios') return;
+  debugIapAlert('pending', 'reprocess start');
+  try {
+    const purchases = await getAvailablePurchases();
+    debugIapAlert('pending', 'available purchases', `count=${purchases.length}`);
+    if (purchases.length === 0) {
+      Alert.alert('Pending Reprocess', '처리할 pending purchase가 없습니다.');
+      return;
+    }
+
+    const results: { status: ProcessResult['status']; transactionId: string; productId: string }[] = [];
+    for (const p of purchases) {
+      try {
+        const res = await processPurchaseLikeListener(p, 'pending reprocess');
+        results.push({ status: res.status, transactionId: res.transactionId, productId: res.productId });
+      } catch (e: any) {
+        const msg = String(e?.message ?? e ?? '');
+        const tid = (() => {
+          try {
+            return extractIosTransactionId(p);
+          } catch {
+            return '(missing)';
+          }
+        })();
+        debugIapAlert(tid, 'listener error', msg || '(no message)');
+        Alert.alert('Pending Reprocess', `error\ntransactionId=${tid}\n${msg}`);
+        results.push({ status: 'grant_failed', transactionId: tid, productId: String((p as any)?.productId ?? '').trim() });
+      }
+    }
+
+    const summary = results.reduce(
+      (acc, r) => {
+        acc.total += 1;
+        acc[r.status] = (acc as any)[r.status] ? (acc as any)[r.status] + 1 : 1;
+        return acc;
+      },
+      { total: 0 } as any
+    );
+
+    Alert.alert(
+      'Pending Reprocess 완료',
+      `total=${summary.total}\nfinished=${summary.finished ?? 0}\nduplicate_finished=${summary.duplicate_finished ?? 0}\nno_session=${
+        summary.no_session ?? 0
+      }\ngrant_failed=${summary.grant_failed ?? 0}`
+    );
+  } catch (e: any) {
+    const msg = String(e?.message ?? e ?? '');
+    Alert.alert('Pending Reprocess', msg || 'pending reprocess error');
+  }
+}
+
 export function getProductIdFromProduct(p: Product | null | undefined): string {
   if (!p) return '';
   return String((p as any)?.id ?? (p as any)?.productId ?? '').trim();
@@ -160,7 +339,6 @@ export function startListeners(): void {
     try {
       productId = String((purchase as any)?.productId ?? '').trim();
       transactionId = extractIosTransactionId(purchase);
-      debugIapAlert(transactionId, 'listener received', `productId=${productId || '(missing)'}`);
 
       // 1) 같은 세션에서 이미 처리한 transactionId면 silent skip
       if (processedTransactionIds.has(transactionId)) {
@@ -169,10 +347,14 @@ export function startListeners(): void {
           transactionId,
           productId,
         });
+        debugIapAlert(transactionId, 'finish start', 'reason=already processed in session');
         try {
           await finishTransaction(purchase, productId);
-        } catch (finishErr) {
+          debugIapAlert(transactionId, 'finish done', 'reason=already processed in session');
+        } catch (finishErr: any) {
           console.log('[RNIAP] duplicate skipped finishTransaction error', finishErr);
+          debugIapAlert(transactionId, 'finish error', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
+          Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
         }
         return;
       }
@@ -188,78 +370,7 @@ export function startListeners(): void {
       }
       inflightTransactionIds.add(transactionId);
 
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-      if (authError || !user?.id) {
-        debugIapAlert(
-          transactionId,
-          'userId missing',
-          `productId=${productId || '(missing)'}\nauthError=${String((authError as any)?.message ?? '')}`
-        );
-        console.log('[RNIAP] skip purchase update without auth session', {
-          transactionId,
-          productId,
-          authErrorMessage: String((authError as any)?.message ?? ''),
-        });
-        return;
-      }
-      debugIapAlert(transactionId, 'userId ok', `userId=${user.id}`);
-
-      debugIapAlert(transactionId, 'grant start');
-      const grantRes = await grantAppleIapAndRecord({
-        userId: user.id,
-        productId,
-        transactionId,
-        productRow: null,
-      });
-      debugIapAlert(transactionId, 'grant result', `ok=${String((grantRes as any)?.ok)} kind=${String((grantRes as any)?.kind ?? '')}`);
-
-      if (!grantRes.ok) {
-        // duplicate 결과는 사용자 Alert 없이 finish 후 종료 (Apple replay 종결)
-        if (grantRes.kind === 'duplicate' || isDuplicateLikeError({ message: grantRes.message })) {
-          console.log('[RNIAP] duplicate skipped', {
-            reason: 'grant duplicate',
-            transactionId,
-            productId,
-            message: grantRes.message,
-          });
-          try {
-            await finishTransaction(purchase, productId);
-          } catch (finishErr) {
-            console.log('[RNIAP] duplicate skipped finishTransaction error', finishErr);
-          }
-          processedTransactionIds.add(transactionId);
-          return;
-        }
-        // 실제 DB 지급 실패만 Alert (pending 유지: finishTransaction 호출 금지)
-        console.error('[RNIAP] grant failed (NOT finishing)', grantRes);
-        Alert.alert(
-          '결제 처리 실패',
-          `kind=${String((grantRes as any)?.kind ?? '')}\n${String(grantRes.message ?? '결제 처리 중 오류가 발생했습니다.')}`
-        );
-        return;
-      }
-
-      debugIapAlert(transactionId, 'finish start');
-      try {
-        await finishTransaction(purchase, productId);
-        debugIapAlert(transactionId, 'finish done');
-      } catch (finishErr: any) {
-        // DB 지급은 성공했지만 finish 실패 → Apple 측 pending 가능성 있으므로 사용자/테스트에서 확인 가능하게 Alert
-        console.error('[RNIAP] finishTransaction failed after grant', finishErr);
-        debugIapAlert(transactionId, 'finish error', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
-        Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
-        return;
-      }
-      processedTransactionIds.add(transactionId);
-
-      if (!alertedTransactionIds.has(transactionId)) {
-        alertedTransactionIds.add(transactionId);
-        const doneMsg = productId === 'com.hywoo.fitting.trainer_30' ? '피티권 지급 완료' : '매칭권 지급 완료';
-        Alert.alert('결제 완료', doneMsg);
-      }
+      await processPurchaseLikeListener(purchase, 'listener');
     } catch (e: any) {
       const msg = String(e?.message ?? e ?? '');
       debugIapAlert(transactionId || '(missing)', 'listener error', msg || '(no message)');

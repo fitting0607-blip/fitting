@@ -313,6 +313,7 @@
   - listener received / userId ok|missing / grant start|result / finish start|done|error 전 단계 Alert 추가
   - grantRes.ok === false 시 kind/message Alert 표시
   - finishTransaction 실패 시 Alert 표시
+- RN IAP pending purchase 재처리용 임시 버튼 추가 — 지급 성공 또는 duplicate 확인 후 finish
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정

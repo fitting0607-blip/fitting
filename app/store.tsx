@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
-import { requestPurchase, isDuplicateLikeError, fetchProducts } from '@/iap/rniap';
+import { requestPurchase, isDuplicateLikeError, fetchProducts, debugReprocessPendingPurchases } from '@/iap/rniap';
 import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
 
 const MAIN = '#6C47FF';
@@ -44,6 +44,7 @@ export default function StoreScreen() {
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
+  const [pendingReprocessLoading, setPendingReprocessLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -275,6 +276,20 @@ export default function StoreScreen() {
 
   const goBack = useCallback(() => router.back(), [router]);
 
+  const onPendingReprocess = useCallback(async () => {
+    if (Platform.OS !== 'ios') return;
+    if (pendingReprocessLoading) return;
+    setPendingReprocessLoading(true);
+    try {
+      // 임시 버튼 (앱스토어 제출 전 제거 예정)
+      await debugReprocessPendingPurchases();
+    } catch (e: any) {
+      Alert.alert('Pending Reprocess', String(e?.message ?? e ?? 'pending reprocess error'));
+    } finally {
+      setPendingReprocessLoading(false);
+    }
+  }, [pendingReprocessLoading]);
+
   const onBuyMatchingTicket = useCallback(
     async (item: StoreItem) => {
       if (tab !== 'matching') return;
@@ -383,6 +398,22 @@ export default function StoreScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {Platform.OS === 'ios' ? (
+          <Pressable
+            onPress={() => void onPendingReprocess()}
+            disabled={pendingReprocessLoading}
+            style={({ pressed }) => [
+              styles.pendingBtn,
+              pressed && styles.pendingBtnPressed,
+              pendingReprocessLoading && styles.pendingBtnDisabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Pending Reprocess"
+          >
+            <Text style={styles.pendingBtnText}>{pendingReprocessLoading ? 'Pending Reprocess…' : 'Pending Reprocess'}</Text>
+          </Pressable>
+        ) : null}
+
         {loading ? (
           <View style={styles.topCardLoading}>
             <ActivityIndicator size="small" color="#FFFFFF" />
@@ -554,6 +585,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 32,
+  },
+  pendingBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#111111',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  pendingBtnPressed: {
+    opacity: 0.92,
+  },
+  pendingBtnDisabled: {
+    opacity: 0.6,
+  },
+  pendingBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
   topCard: {
     flexDirection: 'row',
