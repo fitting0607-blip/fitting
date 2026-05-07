@@ -11,7 +11,7 @@ import type { MbtiParts, RegisterDraft } from '@/app/(auth)/steps/types';
 function parseMbtiParts(mbti: string | null | undefined): MbtiParts {
   const t = (mbti ?? '').trim().toUpperCase();
   if (t.length !== 4) return { EI: null, SN: null, TF: null, JP: null };
-  const [EI, SN, TF, JP] = t.split('') as any[];
+  const [EI, SN, TF, JP] = t.split('') as [string, string, string, string];
   return {
     EI: EI === 'E' || EI === 'I' ? EI : null,
     SN: SN === 'S' || SN === 'N' ? SN : null,
@@ -34,6 +34,7 @@ export default function MbtiSelectScreen() {
     workout_goals: [],
     nickname: '',
     gender: null,
+    phone: '',
     profile_image_url: null,
     profile_image_base64: null,
     age: null,

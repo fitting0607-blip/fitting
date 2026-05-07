@@ -15,7 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
-import { requestPurchase } from '@/iap/rniap';
+import { requestPurchase, isDuplicateLikeError, fetchProducts } from '@/iap/rniap';
+import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
 
 const MAIN = '#6C47FF';
 
@@ -167,8 +168,8 @@ export default function StoreScreen() {
       const run = async (category: 'ticket' | 'matching_ticket') => {
         const runQuery = async (withIapCols: boolean) => {
           const selectCols = withIapCols
-            ? 'id,title,ticket_count,original_price,price,discount_rate,bonus_points,apple_product_id'
-            : 'id,title,ticket_count,original_price,price,discount_rate,bonus_points';
+            ? 'id,title,ticket_count,original_price,price,discount_rate,bonus_points,apple_product_id,is_active,category'
+            : 'id,title,ticket_count,original_price,price,discount_rate,bonus_points,is_active,category';
           const { data, error } = await supabase
             .from('products')
             .select(selectCols)
@@ -188,6 +189,20 @@ export default function StoreScreen() {
         if (error) throw error;
 
         const rows = (data ?? []) as any[];
+
+        // 3개/5개 결제창 미출현 진단용 row 비교 로그
+        console.log(
+          '[STORE] DB matching products',
+          rows.map((r) => ({
+            title: r?.title,
+            apple_product_id: String(r?.apple_product_id ?? '').trim(),
+            price: r?.price,
+            ticket_count: r?.ticket_count,
+            is_active: r?.is_active,
+            category: r?.category ?? category,
+          }))
+        );
+
         const mapped: StoreItem[] = rows
           .filter((r) => !!r?.id)
           .map((r) => ({
@@ -205,12 +220,29 @@ export default function StoreScreen() {
       };
 
       const primary = await run('ticket');
-      if (primary.length > 0) {
-        setProducts(primary);
-        return;
+      const finalProducts = primary.length > 0 ? primary : await run('matching_ticket');
+      setProducts(finalProducts);
+
+      if (Platform.OS === 'ios') {
+        // 3개/5개 결제창 미출현 진단: 매칭권 탭 진입 시 App Store 측 조회 결과를 로그로 남긴다.
+        // - DB row 와 fetchProducts 결과의 SKU를 비교하면 어느 쪽 누락인지 한눈에 보인다.
+        const matchingSkus = APPLE_PRODUCT_IDS.matchingTickets.map((s) => String(s).trim());
+        try {
+          const fetched = await fetchProducts(matchingSkus);
+          const fetchedIds = fetched.map((p: any) => String(p?.id ?? p?.productId ?? '').trim());
+          const dbSkus = finalProducts.map((r) => r.apple_product_id);
+          const missingOnStore = matchingSkus.filter((s) => !fetchedIds.includes(s));
+          const missingInDb = matchingSkus.filter((s) => !dbSkus.includes(s));
+          console.log('[STORE] iap diagnostics (matching)', {
+            dbSkus,
+            fetchedIds,
+            missingOnStore,
+            missingInDb,
+          });
+        } catch (diagErr) {
+          console.warn('[STORE] iap diagnostics fetch failed', diagErr);
+        }
       }
-      const fallback = await run('matching_ticket');
-      setProducts(fallback);
     } catch (e: any) {
       Alert.alert('상품 불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       setProducts([]);
@@ -289,8 +321,13 @@ export default function StoreScreen() {
         }
         await requestPurchase(sku);
       } catch (e: any) {
+        const msg = String(e?.message ?? e ?? '');
+        if (isDuplicateLikeError({ code: e?.code, message: msg })) {
+          console.log('[RNIAP] duplicate skipped', { from: 'store onBuyMatchingTicket', sku, msg });
+          return;
+        }
         console.error('[STORE] purchase error', e);
-        Alert.alert('구매 실패', String(e?.message ?? e ?? '구매 중 오류가 발생했습니다.'));
+        Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
       } finally {
         setPurchasingSku(null);
       }
@@ -323,8 +360,13 @@ export default function StoreScreen() {
         }
         await requestPurchase(sku);
       } catch (e: any) {
+        const msg = String(e?.message ?? e ?? '');
+        if (isDuplicateLikeError({ code: e?.code, message: msg })) {
+          console.log('[RNIAP] duplicate skipped', { from: 'store onBuyPtTicket', sku, msg });
+          return;
+        }
         console.error('[STORE] purchase error', e);
-        Alert.alert('구매 실패', String(e?.message ?? e ?? '구매 중 오류가 발생했습니다.'));
+        Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
       } finally {
         setPurchasingSku(null);
       }

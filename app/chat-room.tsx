@@ -325,7 +325,7 @@ export default function ChatRoomScreen() {
         void requestPushSend({
           mode: 'message',
           roomId,
-          messageId: inserted.id,
+          messageId: row.id,
           route: { pathname: '/chat-room', params: { roomId } },
         });
         }

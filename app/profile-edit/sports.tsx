@@ -22,6 +22,7 @@ export default function SportsSelectScreen() {
     workout_goals: [],
     nickname: '',
     gender: null,
+    phone: '',
     profile_image_url: null,
     profile_image_base64: null,
     age: null,

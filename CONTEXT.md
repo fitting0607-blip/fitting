@@ -278,6 +278,29 @@
   - 사용하지 않는 ref/state/helper 정리
   - purchaseErrorListener 사용자 Alert만 유지 (취소는 조용히 처리)
   - 구매 성공 Alert 유지, 중복 방지 Set 추가
+- (2026-05-07) RN IAP duplicate purchase replay는 사용자 오류 Alert 없이 조용히 skip 처리
+  - iap/rniap.ts: isDuplicateLikeError 헬퍼 추가 (code='duplicate-purchase' / 'duplicate transaction' / 'duplicate purchase update' / 'already processed' 매칭)
+  - 세션 dedup: processedTransactionIds, inflightTransactionIds Set으로 중복 purchaseUpdated 이벤트 silent skip
+  - purchaseUpdatedListener: grant 결과가 duplicate이면 finishTransaction만 silent 호출 후 종료, 미로그인 상태(restore/replay)도 silent skip
+  - purchaseErrorListener: native dedup의 'Duplicate purchase update skipped' 에러는 console.log만 남기고 Alert 차단
+  - app/store.tsx: requestPurchase에서 던져진 duplicate 에러도 Alert 없이 silent skip
+  - 사용자 Alert 유지 케이스: 결제 완료 / 실제 DB 지급 실패 / 실제 purchaseErrorListener 에러
+- (2026-05-07) react-native-iap v15 타입/API(fetchProducts/Purchase) 정리 및 3/5 상품 결제창 미출현 원인 분석
+  - iap/rniap.ts import 정리: getProducts → fetchProducts(별칭 rnFetchProducts), ProductPurchase → Purchase
+  - 로컬 export getProducts() → fetchProducts()로 이름/구현 통일, finishTransaction/extractIosTransactionId/listener 콜백 모두 Purchase 타입 적용
+  - fetchProducts 결과 진단 로그: console.log('[RNIAP] fetched products', [{ id, title, displayPrice, price, type }, ...])
+  - requestPurchase 호출 직전 console.log('[RNIAP] requestPurchase sku', sku)
+  - requestPurchase 진입 시 fetchProducts([sku])로 App Store 측 SKU 가용성 검증 → 없으면 Alert.alert('상품 조회 실패', sku) + throw로 결제창 호출 자체 차단 (3/5 SKU 누락 진단 목적)
+  - app/store.tsx loadMatchingProducts: DB row 비교 로그 (title, apple_product_id, price, ticket_count, is_active, category) 및 매칭권 탭 진입 시 fetchProducts(matchingTickets) 호출하여 missingOnStore / missingInDb 비교 로그 출력
+  - duplicate replay 정책 그대로 유지: duplicate purchase update skipped → silent skip / 이미 처리된 transactionId → Alert 금지 / 실제 결제 실패만 Alert
+  - 결제 구조 그대로 유지: purchaseUpdatedListener 중심, DB 지급 성공 후 finishTransaction, transactionId 중복 지급 방지
+  - tsc --noEmit: 이전에 남아 있던 'getProducts' / 'ProductPurchase' import 관련 오류 해소 확인 (나머지 오류는 본 작업과 무관한 pre-existing 항목)
+  - 3/5 상품 결제창 미출현 원인은 클라이언트 결제 플로우가 아닌 환경 측 문제 가능성이 높음(=fetchProducts 결과에 누락). App Store Connect에서 ticket_3/ticket_5 상품 상태(Approved/Ready to Submit), 가격대 적용, 번들 ID/지역, sandbox 계정 region 확인 필요. 다음 빌드 실행 시 [RNIAP] fetched products / [STORE] iap diagnostics 로그로 누락 SKU 식별 가능
+- 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
+  - tsconfig.json exclude에 admin, supabase/functions 분리
+  - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정
+  - package.json에 typecheck 스크립트 추가
+  - 결제 로직/진단 로그 변경 없음
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)

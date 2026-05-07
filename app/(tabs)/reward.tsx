@@ -6,9 +6,9 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AdEventType,
+  MobileAds,
   RewardedAd,
   RewardedAdEventType,
-  mobileAds,
 } from 'react-native-google-mobile-ads';
 import {
   ActivityIndicator,
@@ -116,12 +116,12 @@ export default function RewardScreen() {
 
   useEffect(() => {
     try {
-      void mobileAds()
+      void MobileAds()
         .initialize()
-        .catch((e) => {
+        .catch((e: unknown) => {
           console.error('[mobileAds] initialize failed', e);
         });
-    } catch (e) {
+    } catch (e: unknown) {
       console.error('[mobileAds] initialize threw', e);
     }
   }, []);
