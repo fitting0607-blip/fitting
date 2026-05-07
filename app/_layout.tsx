@@ -9,7 +9,12 @@ import MobileAds from 'react-native-google-mobile-ads';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { attachNotificationResponseHandler, ensureExpoNotificationHandlerInstalled, registerAndSavePushToken } from '@/app/utils/push';
-import { initConnection as initRniapConnection, startListeners as startRniapListeners, endConnection as endRniapConnection } from '@/iap/rniap';
+import {
+  initConnection as initRniapConnection,
+  startListeners as startRniapListeners,
+  stopListeners as stopRniapListeners,
+  endConnection as endRniapConnection,
+} from '@/iap/rniap';
 import { supabase } from '../supabase';
 
 export const unstable_settings = {
@@ -36,9 +41,12 @@ export default function RootLayout() {
       void (async () => {
         try {
           await initRniapConnection();
-          startRniapListeners();
         } catch (e: unknown) {
           console.error('[RNIAP] init/listeners error in RootLayout', e);
+        } finally {
+          // best-effort: even if init fails, keep listeners registered
+          // (replay events should be silently ignored without auth session)
+          startRniapListeners();
         }
       })();
     }
@@ -70,6 +78,7 @@ export default function RootLayout() {
       mounted = false;
       authListener.subscription.unsubscribe();
       // best-effort cleanup
+      stopRniapListeners();
       void endRniapConnection();
     };
   }, []);

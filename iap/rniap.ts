@@ -22,6 +22,9 @@ let purchaseUpdatedSub: { remove: () => void } | null = null;
 let purchaseErrorSub: { remove: () => void } | null = null;
 const alertedTransactionIds = new Set<string>();
 
+let billingReady = false;
+let connectingPromise: Promise<boolean> | null = null;
+
 // 같은 세션에서 이미 처리한 transactionId를 추적해 중복 purchaseUpdated/replay 이벤트를 silent skip 한다.
 const processedTransactionIds = new Set<string>();
 const inflightTransactionIds = new Set<string>();
@@ -43,17 +46,36 @@ export function isDuplicateLikeError(input: { code?: string | null; message?: st
   );
 }
 
+function isAuthSessionMissingError(input: { code?: string | null; message?: string | null }): boolean {
+  const code = String(input?.code ?? '').toLowerCase();
+  if (code.includes('auth') && code.includes('session')) return true;
+  const msg = String(input?.message ?? '').toLowerCase();
+  if (!msg) return false;
+  return msg.includes('auth session missing');
+}
+
 export async function initConnection(): Promise<boolean> {
   if (Platform.OS !== 'ios') {
     return false;
   }
-  try {
-    const ok = await rnInitConnection();
-    return Boolean(ok);
-  } catch (e) {
-    console.error('[RNIAP] initConnection error', e);
-    return false;
-  }
+  if (billingReady) return true;
+  if (connectingPromise) return await connectingPromise;
+
+  connectingPromise = (async () => {
+    try {
+      const ok = await rnInitConnection();
+      billingReady = Boolean(ok);
+      return billingReady;
+    } catch (e) {
+      billingReady = false;
+      console.error('[RNIAP] initConnection error', e);
+      return false;
+    } finally {
+      connectingPromise = null;
+    }
+  })();
+
+  return await connectingPromise;
 }
 
 export async function endConnection(): Promise<void> {
@@ -62,6 +84,8 @@ export async function endConnection(): Promise<void> {
     await rnEndConnection();
   } catch (e) {
     console.error('[RNIAP] endConnection error', e);
+  } finally {
+    billingReady = false;
   }
 }
 
@@ -91,6 +115,11 @@ export async function requestPurchase(productId: string): Promise<void> {
   if (!sku) throw new Error('missing productId');
   if (sku === 'com.hywoo.fitting.ticket_unlimited') {
     throw new Error('프리미엄 상품은 준비 중입니다.');
+  }
+
+  const ok = await initConnection();
+  if (!ok) {
+    throw new Error('결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
   }
 
   // Ensure we always finish manually only after DB grant succeeds.
@@ -149,14 +178,20 @@ export function startListeners(): void {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
-      if (authError) throw authError;
-      if (!user?.id) {
-        // 앱 시작 시(로그인 화면 등) replay/restore 이벤트가 와도 Alert 없이 조용히 무시
-        console.log('[RNIAP] duplicate skipped', {
-          reason: 'no session at replay',
+      if (authError || !user?.id) {
+        console.log('[RNIAP] skip purchase update without auth session', {
           transactionId,
           productId,
+          authErrorMessage: String((authError as any)?.message ?? ''),
         });
+        try {
+          await finishTransaction(purchase, productId);
+        } catch (finishErr) {
+          console.log('[RNIAP] skip purchase update without auth session finishTransaction error', finishErr);
+        } finally {
+          // 로그인 전 replay/pending transaction이 앱 실행마다 반복되지 않도록 세션에서도 처리 완료로 표시
+          processedTransactionIds.add(transactionId);
+        }
         return;
       }
 
@@ -195,10 +230,19 @@ export function startListeners(): void {
 
       if (!alertedTransactionIds.has(transactionId)) {
         alertedTransactionIds.add(transactionId);
-        Alert.alert('결제 완료', '매칭권 지급 완료');
+        const doneMsg = productId === 'com.hywoo.fitting.trainer_30' ? '피티권 지급 완료' : '매칭권 지급 완료';
+        Alert.alert('결제 완료', doneMsg);
       }
     } catch (e: any) {
       const msg = String(e?.message ?? e ?? '');
+      if (isAuthSessionMissingError({ code: e?.code, message: msg })) {
+        console.log('[RNIAP] skip purchase update without auth session', {
+          transactionId,
+          productId,
+          msg,
+        });
+        return;
+      }
       if (isDuplicateLikeError({ message: msg })) {
         console.log('[RNIAP] duplicate skipped', {
           reason: 'thrown',
@@ -220,6 +264,12 @@ export function startListeners(): void {
     const message = String((error as any)?.message ?? '');
     if (code === 'user-cancelled' || code === 'E_USER_CANCELLED') return;
 
+    const lowerMsg = message.toLowerCase();
+    if (lowerMsg.includes('billing is not prepared')) {
+      Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
     // native(iOS)에서 중복 purchaseUpdated 이벤트를 감지했을 때 보내는 duplicate-purchase 에러는
     // 결제 실패가 아니라 dedup 알림이므로 사용자 Alert 없이 조용히 skip
     if (isDuplicateLikeError({ code, message })) {
@@ -228,6 +278,11 @@ export function startListeners(): void {
         code,
         message,
       });
+      return;
+    }
+
+    if (isAuthSessionMissingError({ code, message })) {
+      console.log('[RNIAP] skip purchase error without auth session', { code, message });
       return;
     }
 

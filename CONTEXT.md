@@ -300,6 +300,11 @@
   - false negative로 정상 상품도 차단되는 문제 수정
   - requestPurchase는 바로 native 호출로 변경
   - 진단 로그는 store.tsx loadMatchingProducts에만 유지
+- RN IAP billing 준비 상태 보강 및 로그인 세션 없는 replay 이벤트 silent 처리
+- RN IAP 안정화 추가 수정
+  - 로그인 세션 없는 replay 이벤트: finishTransaction 후 processedTransactionIds 추가 (pending 누적 방지)
+  - 결제 완료 Alert 분기: trainer_30은 "피티권 지급 완료", 나머지는 "매칭권 지급 완료"
+  - _layout.tsx unmount 시 stopListeners + endConnection cleanup 추가
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정
