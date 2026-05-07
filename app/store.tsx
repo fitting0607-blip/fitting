@@ -352,7 +352,6 @@ export default function StoreScreen() {
         console.log('[IAP] before ensureIap');
         const ok = await withTimeout(ensureIap(), 8000, 'ensureIap');
         console.log('[IAP] after ensureIap', ok);
-        Alert.alert('[IAP] ensureIap', 'ok=' + ok);
         if (!ok) {
           Alert.alert('안내', '결제를 준비 중입니다. 잠시 후 다시 시도해주세요.');
           return;
@@ -370,10 +369,6 @@ export default function StoreScreen() {
 
         const productResults = productRes?.results ?? [];
         console.log('[IAP] responseCode', productRes?.responseCode);
-        Alert.alert(
-          '[IAP] products',
-          'responseCode=' + productRes?.responseCode + ' count=' + productResults.length
-        );
 
         if (!productResults.length) {
           Alert.alert(
@@ -392,6 +387,7 @@ export default function StoreScreen() {
         );
 
         console.log('[IAP] purchaseItemAsync result', JSON.stringify(purchaseRes));
+        Alert.alert('[IAP] purchase result', JSON.stringify(purchaseRes));
       } catch (e: any) {
         console.log('[IAP] error raw', e);
         if (isTimeoutError(e)) {
