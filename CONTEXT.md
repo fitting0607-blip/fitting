@@ -302,9 +302,13 @@
   - 진단 로그는 store.tsx loadMatchingProducts에만 유지
 - RN IAP billing 준비 상태 보강 및 로그인 세션 없는 replay 이벤트 silent 처리
 - RN IAP 안정화 추가 수정
-  - 로그인 세션 없는 replay 이벤트: finishTransaction 후 processedTransactionIds 추가 (pending 누적 방지)
   - 결제 완료 Alert 분기: trainer_30은 "피티권 지급 완료", 나머지는 "매칭권 지급 완료"
   - _layout.tsx unmount 시 stopListeners + endConnection cleanup 추가
+- RN IAP 롤백 및 디버그 Alert 추가
+  - 로그인 세션 없는 replay에서 finishTransaction 금지로 롤백
+  - DB 지급 성공 후에만 finishTransaction 원칙 재적용
+  - purchaseUpdatedListener 진단 Alert 임시 추가 (__DEV__ 전용)
+  - _layout.tsx stopListeners는 RootLayout unmount 시에만 호출 확인
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정

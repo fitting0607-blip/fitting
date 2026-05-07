@@ -21,6 +21,7 @@ let listenersStarted = false;
 let purchaseUpdatedSub: { remove: () => void } | null = null;
 let purchaseErrorSub: { remove: () => void } | null = null;
 const alertedTransactionIds = new Set<string>();
+const debugAlertedTransactionIds = new Set<string>();
 
 let billingReady = false;
 let connectingPromise: Promise<boolean> | null = null;
@@ -52,6 +53,19 @@ function isAuthSessionMissingError(input: { code?: string | null; message?: stri
   const msg = String(input?.message ?? '').toLowerCase();
   if (!msg) return false;
   return msg.includes('auth session missing');
+}
+
+function debugIapAlert(transactionId: string, step: string, detail?: string): void {
+  // 임시 진단용: 같은 transactionId에 대해 과도한 Alert 반복 방지
+  if (typeof __DEV__ !== 'undefined' && __DEV__ !== true) return;
+  const key = `${transactionId}:${step}`;
+  if (debugAlertedTransactionIds.has(key)) return;
+  debugAlertedTransactionIds.add(key);
+  try {
+    Alert.alert('IAP DEBUG', detail ? `${step}\n${detail}` : step);
+  } catch {
+    // ignore
+  }
 }
 
 export async function initConnection(): Promise<boolean> {
@@ -147,6 +161,7 @@ export function startListeners(): void {
     try {
       productId = String((purchase as any)?.productId ?? '').trim();
       transactionId = extractIosTransactionId(purchase);
+      debugIapAlert(transactionId, 'listener received', `productId=${productId || '(missing)'}`);
 
       // 1) 같은 세션에서 이미 처리한 transactionId면 silent skip
       if (processedTransactionIds.has(transactionId)) {
@@ -184,16 +199,9 @@ export function startListeners(): void {
           productId,
           authErrorMessage: String((authError as any)?.message ?? ''),
         });
-        try {
-          await finishTransaction(purchase, productId);
-        } catch (finishErr) {
-          console.log('[RNIAP] skip purchase update without auth session finishTransaction error', finishErr);
-        } finally {
-          // 로그인 전 replay/pending transaction이 앱 실행마다 반복되지 않도록 세션에서도 처리 완료로 표시
-          processedTransactionIds.add(transactionId);
-        }
         return;
       }
+      debugIapAlert(transactionId, 'userId ok', `userId=${user.id}`);
 
       const grantRes = await grantAppleIapAndRecord({
         userId: user.id,
@@ -201,6 +209,7 @@ export function startListeners(): void {
         transactionId,
         productRow: null,
       });
+      debugIapAlert(transactionId, 'grant result', `ok=${String((grantRes as any)?.ok)} kind=${String((grantRes as any)?.kind ?? '')}`);
 
       if (!grantRes.ok) {
         // duplicate 결과는 사용자 Alert 없이 finish 후 종료 (Apple replay 종결)
@@ -226,6 +235,7 @@ export function startListeners(): void {
       }
 
       await finishTransaction(purchase, productId);
+      debugIapAlert(transactionId, 'finish done');
       processedTransactionIds.add(transactionId);
 
       if (!alertedTransactionIds.has(transactionId)) {
