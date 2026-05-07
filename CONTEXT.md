@@ -242,6 +242,7 @@
   - Windows 환경 대응: timeout/에러 시 Alert로 오류 표시
   - 단계별 Alert 디버그 추가(ensureIap 전후, getProductsAsync 결과)
 - purchase listener 디버그 로그 강화, purchaseItemAsync timeout 제거, listener 중심 결제 처리 구조로 정리
+- IAP listener 항상 등록(iapReady 조건 제거), 지급 로직 단계별 Alert 디버그 추가
 - IAP purchaseItemAsync 호출 차단 버그 수정 - before purchase Alert 제거, withTimeout 적용, 단계별 디버그 로그 정리
 - IAP 상품 조회 검증 추가: onBuyMatchingTicket/onBuyPtTicket에서 getProductsAsync 결과를 확인하고, 상품 미조회 시 purchaseItemAsync를 호출하지 않도록 수정
 - IAP 중복 구매 방지 개선: purchaseItemAsync 직후 finally에서 purchasingSku를 즉시 해제하지 않고, listener 처리 완료 후 해제하도록 변경

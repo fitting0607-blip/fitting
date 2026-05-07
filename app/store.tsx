@@ -531,8 +531,6 @@ export default function StoreScreen() {
 
   React.useEffect(() => {
     if (Platform.OS !== 'ios') return;
-    // connectAsync 완료(iapReady=true) 이후에만 listener 등록
-    if (!iapReady) return;
     let mounted = true;
 
     const TICKET_QTY_BY_PRODUCT_ID: Record<string, number> = {
@@ -546,6 +544,10 @@ export default function StoreScreen() {
     console.log('[IAP] listener registered');
 
     InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: any) => {
+      Alert.alert(
+        '[IAP] listener received',
+        `responseCode=${String(responseCode)}\nresults=${String(results?.length ?? 0)}`
+      );
       console.log(
         '[IAP] purchase listener event',
         JSON.stringify({
@@ -648,50 +650,62 @@ export default function StoreScreen() {
 
       for (const purchase of purchases) {
         try {
-          const state = (purchase as any)?.purchaseState;
-          const sku = String((purchase as any)?.productId ?? '').trim();
+          const purchaseState = (purchase as any)?.purchaseState;
+          const productId = String((purchase as any)?.productId ?? '').trim();
           const transactionId = String(
             (purchase as any)?.transactionId ??
               (purchase as any)?.transactionID ??
               (purchase as any)?.orderId ??
               ''
           ).trim();
-          console.log('[IAP] productId', sku);
+          Alert.alert(
+            '[IAP] purchase item',
+            `productId=${productId}\ntransactionId=${transactionId}\npurchaseState=${String(purchaseState)}`
+          );
+
+          console.log('[IAP] productId', productId);
           console.log('[IAP] transactionId', transactionId);
-          console.log('[IAP] purchaseState', state);
+          console.log('[IAP] purchaseState', purchaseState);
           console.log('[IAP] processing purchase start', transactionId);
 
-          const purchaseState = (InAppPurchases as any).IAPPurchaseState;
+          if (productId && !(productId in TICKET_QTY_BY_PRODUCT_ID)) {
+            Alert.alert('[IAP] unmapped productId', productId);
+          }
+
+          const purchaseStateEnum = (InAppPurchases as any).IAPPurchaseState;
           const purchased =
-            state === purchaseState?.PURCHASED ||
-            state === purchaseState?.RESTORED ||
-            state === 0 ||
-            state === 1 ||
-            state == null;
+            purchaseState === purchaseStateEnum?.PURCHASED ||
+            purchaseState === purchaseStateEnum?.RESTORED ||
+            purchaseState === 0 ||
+            purchaseState === 1 ||
+            purchaseState == null;
 
           // productId가 매핑된 상품일 때만 지급 처리
           const isKnownProductId =
-            sku in TICKET_QTY_BY_PRODUCT_ID ||
-            sku === 'com.hywoo.fitting.ticket_unlimited' ||
-            sku === 'com.hywoo.fitting.trainer_30';
+            productId in TICKET_QTY_BY_PRODUCT_ID ||
+            productId === 'com.hywoo.fitting.ticket_unlimited' ||
+            productId === 'com.hywoo.fitting.trainer_30';
 
-          if (!sku || !isKnownProductId) {
-            console.log('[IAP] unknown/empty productId, skip grant', { sku, state });
+          if (!productId || !isKnownProductId) {
+            console.log('[IAP] unknown/empty productId, skip grant', {
+              productId,
+              purchaseState,
+            });
             setPurchasingSku(null);
             continue;
           }
 
           // pending transaction도 처리되도록 purchased 판별을 완화
           if (!purchased) {
-            console.log('[IAP] not purchased/restored, skip grant', { sku, state });
+            console.log('[IAP] not purchased/restored, skip grant', { productId, purchaseState });
             setPurchasingSku(null);
             continue;
           }
 
           const item =
-            products.find((p) => p.apple_product_id.trim() === sku) ??
-            products.find((p) => p.id === sku) ??
-            (await fetchProductBySku(sku));
+            products.find((p) => p.apple_product_id.trim() === productId) ??
+            products.find((p) => p.id === productId) ??
+            (await fetchProductBySku(productId));
 
           const {
             data: { user },
@@ -710,9 +724,9 @@ export default function StoreScreen() {
           }
 
           const category = item.category;
-          if (sku === 'com.hywoo.fitting.ticket_unlimited') {
+          if (productId === 'com.hywoo.fitting.ticket_unlimited') {
             // premium (별도 처리)
-            console.log('[IAP] premium product detected, handled separately', sku);
+            console.log('[IAP] premium product detected, handled separately', productId);
             console.error('[IAP] premium grant not implemented yet');
             Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
             console.log('[IAP] finishTransaction start', transactionId);
@@ -746,12 +760,12 @@ export default function StoreScreen() {
             const payload = {
               user_id: user.id,
               product_id: item?.id ?? null,
-              product_title: item?.title ?? sku,
+              product_title: item?.title ?? productId,
               amount: typeof item?.price === 'number' ? item.price : null,
               status: 'succeeded',
               transaction_id: transactionId || null,
             };
-            const res = await insertPayment(payload, { state });
+            const res = await insertPayment(payload, { state: purchaseState });
             if (!res.ok) {
               console.log('payment insert error');
               console.error(res.error);
@@ -761,7 +775,7 @@ export default function StoreScreen() {
             console.log('payment insert success');
           }
 
-          if (sku === 'com.hywoo.fitting.trainer_30' || category === 'pt_ticket') {
+          if (productId === 'com.hywoo.fitting.trainer_30' || category === 'pt_ticket') {
             // 피티권(별도 처리): trainer_profiles 최신 1건 is_approved=true
             const { data: latestProfile, error: profErr } = await supabase
               .from('trainer_profiles')
@@ -797,7 +811,7 @@ export default function StoreScreen() {
           }
 
           // 매칭권: productId별 수량 매핑 우선
-          const addTicketsFromMap = TICKET_QTY_BY_PRODUCT_ID[sku];
+          const addTicketsFromMap = TICKET_QTY_BY_PRODUCT_ID[productId];
           const addTickets = Math.max(0, typeof addTicketsFromMap === 'number' ? addTicketsFromMap : (item?.ticket_count ?? 0));
           const addPoints = Math.max(0, item?.bonus_points ?? 0);
 
@@ -854,7 +868,10 @@ export default function StoreScreen() {
         } catch (e: any) {
           setPurchasingSku(null);
           console.error(e);
-          Alert.alert('결제 처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+          Alert.alert(
+            '[IAP] grant error',
+            typeof e === 'object' ? JSON.stringify(e, null, 2) : String(e)
+          );
         } finally {
           const transactionId = String(
             (purchase as any)?.transactionId ??
@@ -879,7 +896,7 @@ export default function StoreScreen() {
         // ignore
       }
     };
-  }, [iapReady, products, purchasingSku, loadMyPt]);
+  }, [products, purchasingSku, loadMyPt, fetchProductBySku]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
