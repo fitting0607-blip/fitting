@@ -314,6 +314,9 @@
   - grantRes.ok === false 시 kind/message Alert 표시
   - finishTransaction 실패 시 Alert 표시
 - RN IAP pending purchase 재처리용 임시 버튼 추가 — 지급 성공 또는 duplicate 확인 후 finish
+- (2026-05-08) TEMP 상점 Pending Reprocess 버튼: iOS transaction queue clear 디버그로 변경 (운영 자동 실행 금지, App Store 제출 전 제거)
+  - react-native-iap v15에 clearTransactionIOS export가 없어 getPendingTransactionsIOS + finishTransaction으로 pending을 정리
+  - DB 지급 로직 호출 금지, 버튼 클릭 시에만 실행, 성공/실패 Alert + [IAP] clearTransactionIOS 로그 추가
 - (2026-05-08) store.tsx purchasingSku stuck 문제 수정
   - requestPurchase가 이벤트 기반이라 finally가 안 불리는 경우 purchasingSku 리셋 안 됨
   - iap/rniap.ts에 subscribePurchaseUiIdle/emitPurchaseUiIdle 추가

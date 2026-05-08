@@ -19,7 +19,7 @@ import {
   requestPurchase,
   isDuplicateLikeError,
   fetchProducts,
-  debugReprocessPendingPurchases,
+  debugClearTransactionQueueIOS,
   subscribePurchaseUiIdle,
 } from '@/iap/rniap';
 import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
@@ -313,8 +313,8 @@ export default function StoreScreen() {
     if (pendingReprocessLoading) return;
     setPendingReprocessLoading(true);
     try {
-      // 임시 버튼 (앱스토어 제출 전 제거 예정)
-      await debugReprocessPendingPurchases();
+      // TEMP 디버그 전용: 운영 자동 실행 금지, 구매 직전 자동 실행 금지
+      await debugClearTransactionQueueIOS();
     } catch (e: any) {
       Alert.alert('Pending Reprocess', String(e?.message ?? e ?? 'pending reprocess error'));
     } finally {

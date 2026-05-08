@@ -4,6 +4,7 @@ import {
   fetchProducts as rnFetchProducts,
   finishTransaction as rnFinishTransaction,
   getAvailablePurchases as rnGetAvailablePurchases,
+  getPendingTransactionsIOS as rnGetPendingTransactionsIOS,
   initConnection as rnInitConnection,
   purchaseErrorListener,
   purchaseUpdatedListener,
@@ -314,6 +315,49 @@ export async function debugReprocessPendingPurchases(): Promise<void> {
   } catch (e: any) {
     const msg = String(e?.message ?? e ?? '');
     Alert.alert('Pending Reprocess', msg || 'pending reprocess error');
+  }
+}
+
+/**
+ * TEMP debug-only (TestFlight/Sandbox): clear iOS transaction queue.
+ * - Never call DB grant logic here.
+ * - Must be manually invoked from a debug button only.
+ */
+export async function debugClearTransactionQueueIOS(): Promise<void> {
+  if (Platform.OS !== 'ios') return;
+  console.log('[IAP] clearTransactionIOS start');
+  try {
+    const ok = await initConnection();
+    if (!ok) throw new Error('initConnection failed');
+
+    // react-native-iap v15 exports getPendingTransactionsIOS (clearTransactionIOS may not exist)
+    const pending = ((await rnGetPendingTransactionsIOS()) as Purchase[] | null | undefined) ?? [];
+    for (const p of pending) {
+      console.log(
+        '[IAP] finishing pending transaction only',
+        JSON.stringify({
+          productId: (p as any)?.productId,
+          transactionId: (p as any)?.transactionId,
+        })
+      );
+      // finish only; no DB grant/recording; do NOT use custom wrapper
+      await rnFinishTransaction({
+        purchase: p,
+        isConsumable: true,
+      } as any);
+    }
+    console.log('[IAP] clearTransactionIOS success');
+    Alert.alert('완료', 'Transaction queue cleared');
+  } catch (e: any) {
+    console.log('[IAP] clearTransactionIOS failed', e);
+    Alert.alert(
+      'clearTransactionIOS error',
+      JSON.stringify({
+        message: e?.message,
+        code: e?.code,
+        name: e?.name,
+      })
+    );
   }
 }
 
