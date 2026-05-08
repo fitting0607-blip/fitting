@@ -320,6 +320,8 @@
   - purchaseUpdatedListener 완료 시 productId로 idle 알림
   - store.tsx에서 구독 후 purchasingSku 해제
   - 120초 워치독으로 강제 해제 추가
+- (2026-05-08) TEMP app/store.tsx purchasingSku stuck 진단용 UI/로그 (App Store 제출 전 제거: Alert가 결제 시트 호출을 지연할 수 있음)
+  - 헤더 하단 purchasingSku 텍스트·Reset SKU 버튼·포커스 시 [STORE] initial purchasingSku 로그·매칭권 행 onPress click Alert·onBuyMatchingTicket 분기별 console.log
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정

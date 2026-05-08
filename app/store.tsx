@@ -298,6 +298,13 @@ export default function StoreScreen() {
     }, [load, loadMyPt, loadProducts, loadMatchingProducts, tab])
   );
 
+  /** TEMP App Store 제출 전 제거: 화면 포커스 시 purchasingSku 상태 로그 */
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[STORE] initial purchasingSku', purchasingSku);
+    }, [purchasingSku])
+  );
+
   const goBack = useCallback(() => router.back(), [router]);
 
   const onPendingReprocess = useCallback(async () => {
@@ -316,17 +323,25 @@ export default function StoreScreen() {
 
   const onBuyMatchingTicket = useCallback(
     async (item: StoreItem) => {
-      if (tab !== 'matching') return;
+      if (tab !== 'matching') {
+        console.log('[STORE] onBuyMatchingTicket:', 'tab mismatch');
+        return;
+      }
       if (Platform.OS !== 'ios') {
+        console.log('[STORE] onBuyMatchingTicket:', 'non-ios');
         Alert.alert('안내', '현재 iOS에서만 인앱결제를 지원합니다.');
         return;
       }
       const sku = item.apple_product_id?.trim();
       if (!sku) {
+        console.log('[STORE] onBuyMatchingTicket:', 'missing sku');
         Alert.alert('구매 불가', '상품 정보가 올바르지 않습니다.');
         return;
       }
-      if (purchasingSku) return;
+      if (purchasingSku) {
+        console.log('[STORE] onBuyMatchingTicket:', 'purchasingSku blocked');
+        return;
+      }
       clearPurchasingWatchdog();
       setPurchasingSku(sku);
       purchasingWatchdogRef.current = setTimeout(() => {
@@ -334,10 +349,13 @@ export default function StoreScreen() {
       }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
+          console.log('[STORE] onBuyMatchingTicket:', 'premium blocked');
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
           return;
         }
+        console.log('[STORE] onBuyMatchingTicket:', 'requestPurchase start');
         await requestPurchase(sku);
+        console.log('[STORE] onBuyMatchingTicket:', 'requestPurchase returned');
       } catch (e: any) {
         const msg = String(e?.message ?? e ?? '');
         if (isDuplicateLikeError({ code: e?.code, message: msg })) {
@@ -347,6 +365,7 @@ export default function StoreScreen() {
         console.error('[STORE] purchase error', e);
         Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
       } finally {
+        console.log('[STORE] onBuyMatchingTicket:', 'finally reset');
         clearPurchasingWatchdog();
         setPurchasingSku(null);
       }
@@ -425,6 +444,21 @@ export default function StoreScreen() {
         </Pressable>
         <Text style={styles.headerTitle}>상점</Text>
         <View style={styles.headerBtn} />
+      </View>
+
+      {/* TEMP App Store 제출 전 제거: purchasingSku stuck 진단 */}
+      <View style={styles.debugPurchasingSkuBar}>
+        <Text style={styles.debugPurchasingSkuText} selectable>
+          purchasingSku: {purchasingSku ?? 'null'}
+        </Text>
+        <Pressable
+          onPress={() => setPurchasingSku(null)}
+          style={styles.debugPurchasingSkuResetBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Reset SKU"
+        >
+          <Text style={styles.debugPurchasingSkuResetBtnText}>Reset SKU</Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -511,7 +545,17 @@ export default function StoreScreen() {
                     style: styles.row,
                   }
                 : {
-                    onPress: () => void onBuyMatchingTicket(item),
+                    /** TEMP App Store 제출 전 제거: 클릭 시 Alert가 결제 시트 지연 가능 */
+                    onPress: () => {
+                      Alert.alert(
+                        'click',
+                        JSON.stringify({
+                          purchasingSku,
+                          productId: item.apple_product_id,
+                        })
+                      );
+                      void onBuyMatchingTicket(item);
+                    },
                     style: ({ pressed }: { pressed: boolean }) =>
                       [styles.row, pressed && styles.rowPressed] as any,
                     accessibilityRole: 'button' as const,
@@ -614,6 +658,34 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#111111',
+  },
+  debugPurchasingSkuBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FEF3C7',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#FCD34D',
+  },
+  debugPurchasingSkuText: {
+    flex: 1,
+    fontSize: 11,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    color: '#92400E',
+  },
+  debugPurchasingSkuResetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#111111',
+  },
+  debugPurchasingSkuResetBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   scrollContent: {
     paddingHorizontal: 16,
