@@ -31,6 +31,29 @@ let connectingPromise: Promise<boolean> | null = null;
 const processedTransactionIds = new Set<string>();
 const inflightTransactionIds = new Set<string>();
 
+/** store.tsx 등에서 purchasingSku 해제 — listener는 rniap에만 있으므로 여기서 UI 동기화 */
+type PurchaseUiIdleListener = (info: { productId: string }) => void;
+const purchaseUiIdleListeners = new Set<PurchaseUiIdleListener>();
+
+function emitPurchaseUiIdle(productId: string): void {
+  const pid = String(productId ?? '').trim();
+  if (!pid) return;
+  purchaseUiIdleListeners.forEach((cb) => {
+    try {
+      cb({ productId: pid });
+    } catch {
+      // ignore subscriber errors
+    }
+  });
+}
+
+export function subscribePurchaseUiIdle(cb: PurchaseUiIdleListener): () => void {
+  purchaseUiIdleListeners.add(cb);
+  return () => {
+    purchaseUiIdleListeners.delete(cb);
+  };
+}
+
 // react-native-iap native(iOS)는 같은 purchaseUpdated 이벤트를 dedup 한 뒤
 // "Duplicate purchase update skipped ..." 메시지의 purchaseError를 보낸다.
 // 그런 케이스나, grant 단계에서 DB transactionId가 이미 있어 duplicate으로 떨어지는 케이스는
@@ -336,6 +359,7 @@ export function startListeners(): void {
   purchaseUpdatedSub = purchaseUpdatedListener(async (purchase: Purchase) => {
     let transactionId = '';
     let productId = '';
+    let skipPurchaseUiIdle = false;
     try {
       productId = String((purchase as any)?.productId ?? '').trim();
       transactionId = extractIosTransactionId(purchase);
@@ -366,6 +390,7 @@ export function startListeners(): void {
           transactionId,
           productId,
         });
+        skipPurchaseUiIdle = true;
         return;
       }
       inflightTransactionIds.add(transactionId);
@@ -395,16 +420,26 @@ export function startListeners(): void {
       Alert.alert('결제 처리 실패', msg || '결제 처리 중 오류가 발생했습니다.');
     } finally {
       if (transactionId) inflightTransactionIds.delete(transactionId);
+      if (!skipPurchaseUiIdle && productId) {
+        emitPurchaseUiIdle(productId);
+      }
     }
   });
 
   purchaseErrorSub = purchaseErrorListener((error: PurchaseError) => {
     const code = String((error as any)?.code ?? '').trim();
     const message = String((error as any)?.message ?? '');
-    if (code === 'user-cancelled' || code === 'E_USER_CANCELLED') return;
+    const skuFromErr = String((error as any)?.productId ?? (error as any)?.sku ?? '').trim();
+
+    if (code === 'user-cancelled' || code === 'E_USER_CANCELLED') {
+      // 이벤트 기반 requestPurchase는 프로미스가 안 풀리는 경우가 있어 store purchasingSku 고착 방지
+      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+      return;
+    }
 
     const lowerMsg = message.toLowerCase();
     if (lowerMsg.includes('billing is not prepared')) {
+      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
       Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
       return;
     }
@@ -423,6 +458,10 @@ export function startListeners(): void {
     if (isAuthSessionMissingError({ code, message })) {
       console.log('[RNIAP] skip purchase error without auth session', { code, message });
       return;
+    }
+
+    if (skuFromErr) {
+      emitPurchaseUiIdle(skuFromErr);
     }
 
     console.error('[RNIAP] purchaseErrorListener', error);

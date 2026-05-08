@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,10 +15,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
-import { requestPurchase, isDuplicateLikeError, fetchProducts, debugReprocessPendingPurchases } from '@/iap/rniap';
+import {
+  requestPurchase,
+  isDuplicateLikeError,
+  fetchProducts,
+  debugReprocessPendingPurchases,
+  subscribePurchaseUiIdle,
+} from '@/iap/rniap';
 import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
 
 const MAIN = '#6C47FF';
+
+/** requestPurchase 프로미스가 해결되지 않을 때 purchasingSku 고착 방지 (이벤트 기반 IAP) */
+const PURCHASE_SKU_STUCK_TIMEOUT_MS = 120_000;
 
 type StoreItem = {
   id: string;
@@ -45,6 +54,21 @@ export default function StoreScreen() {
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
   const [pendingReprocessLoading, setPendingReprocessLoading] = useState(false);
+
+  const purchasingWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearPurchasingWatchdog = useCallback(() => {
+    if (purchasingWatchdogRef.current) {
+      clearTimeout(purchasingWatchdogRef.current);
+      purchasingWatchdogRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return subscribePurchaseUiIdle(({ productId }) => {
+      clearPurchasingWatchdog();
+      setPurchasingSku((cur) => (cur === productId ? null : cur));
+    });
+  }, [clearPurchasingWatchdog]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -303,7 +327,11 @@ export default function StoreScreen() {
         return;
       }
       if (purchasingSku) return;
+      clearPurchasingWatchdog();
       setPurchasingSku(sku);
+      purchasingWatchdogRef.current = setTimeout(() => {
+        setPurchasingSku((cur) => (cur === sku ? null : cur));
+      }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
@@ -319,10 +347,11 @@ export default function StoreScreen() {
         console.error('[STORE] purchase error', e);
         Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
       } finally {
+        clearPurchasingWatchdog();
         setPurchasingSku(null);
       }
     },
-    [tab, purchasingSku]
+    [tab, purchasingSku, clearPurchasingWatchdog]
   );
 
   const onBuyPtTicket = useCallback(
@@ -342,7 +371,11 @@ export default function StoreScreen() {
         return;
       }
       if (purchasingSku) return;
+      clearPurchasingWatchdog();
       setPurchasingSku(sku);
+      purchasingWatchdogRef.current = setTimeout(() => {
+        setPurchasingSku((cur) => (cur === sku ? null : cur));
+      }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
@@ -358,10 +391,11 @@ export default function StoreScreen() {
         console.error('[STORE] purchase error', e);
         Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
       } finally {
+        clearPurchasingWatchdog();
         setPurchasingSku(null);
       }
     },
-    [tab, myPtEligible, purchasingSku]
+    [tab, myPtEligible, purchasingSku, clearPurchasingWatchdog]
   );
 
   const formatKRW = useCallback((value: number) => {

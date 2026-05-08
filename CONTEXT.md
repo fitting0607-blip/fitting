@@ -314,6 +314,12 @@
   - grantRes.ok === false 시 kind/message Alert 표시
   - finishTransaction 실패 시 Alert 표시
 - RN IAP pending purchase 재처리용 임시 버튼 추가 — 지급 성공 또는 duplicate 확인 후 finish
+- (2026-05-08) store.tsx purchasingSku stuck 문제 수정
+  - requestPurchase가 이벤트 기반이라 finally가 안 불리는 경우 purchasingSku 리셋 안 됨
+  - iap/rniap.ts에 subscribePurchaseUiIdle/emitPurchaseUiIdle 추가
+  - purchaseUpdatedListener 완료 시 productId로 idle 알림
+  - store.tsx에서 구독 후 purchasingSku 해제
+  - 120초 워치독으로 강제 해제 추가
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정
