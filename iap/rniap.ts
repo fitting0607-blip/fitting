@@ -348,7 +348,14 @@ export async function requestPurchase(productId: string): Promise<void> {
       },
     },
   };
-  await rnRequestPurchase(payload);
+  console.log('[IAP] rnRequestPurchase payload', payload);
+  try {
+    const result = await rnRequestPurchase(payload as any);
+    console.log('[IAP] rnRequestPurchase returned', result);
+  } catch (e: any) {
+    console.error('[IAP] requestPurchase throw', e);
+    throw e;
+  }
 }
 
 export function startListeners(): void {
@@ -431,17 +438,21 @@ export function startListeners(): void {
     const message = String((error as any)?.message ?? '');
     const skuFromErr = String((error as any)?.productId ?? (error as any)?.sku ?? '').trim();
 
-    if (code === 'user-cancelled' || code === 'E_USER_CANCELLED') {
-      // 이벤트 기반 requestPurchase는 프로미스가 안 풀리는 경우가 있어 store purchasingSku 고착 방지
-      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
-      return;
-    }
+    // TEMP 디버그: 모든 purchase error를 Alert로 노출해 결제창 미출현 원인 확인
+    console.error('[IAP] purchaseErrorListener', error);
+    Alert.alert(
+      'purchaseErrorListener',
+      JSON.stringify({
+        message,
+        code,
+        productId: skuFromErr,
+      })
+    );
 
     const lowerMsg = message.toLowerCase();
     if (lowerMsg.includes('billing is not prepared')) {
       if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
       Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
-      return;
     }
 
     // native(iOS)에서 중복 purchaseUpdated 이벤트를 감지했을 때 보내는 duplicate-purchase 에러는
@@ -452,19 +463,16 @@ export function startListeners(): void {
         code,
         message,
       });
-      return;
     }
 
     if (isAuthSessionMissingError({ code, message })) {
       console.log('[RNIAP] skip purchase error without auth session', { code, message });
-      return;
     }
 
     if (skuFromErr) {
       emitPurchaseUiIdle(skuFromErr);
     }
 
-    console.error('[RNIAP] purchaseErrorListener', error);
     Alert.alert('결제 오류', message || '결제 중 오류가 발생했습니다.');
   });
 }

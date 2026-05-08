@@ -367,14 +367,16 @@ export default function StoreScreen() {
         setLastBuyStep('requestPurchase returned');
         console.log('[STORE] onBuyMatchingTicket:', 'requestPurchase returned');
       } catch (e: any) {
-        const msg = String(e?.message ?? e ?? '');
-        if (isDuplicateLikeError({ code: e?.code, message: msg })) {
-          console.log('[RNIAP] duplicate skipped', { from: 'store onBuyMatchingTicket', sku, msg });
-          return;
-        }
         setLastBuyStep('catch error');
-        console.error('[STORE] purchase error', e);
-        Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
+        console.error('[STORE] onBuyMatchingTicket catch', e);
+        Alert.alert(
+          'catch error',
+          JSON.stringify({
+            message: e?.message,
+            code: e?.code,
+            name: e?.name,
+          })
+        );
       } finally {
         setLastBuyStep('finally reset');
         console.log('[STORE] onBuyMatchingTicket:', 'finally reset');
