@@ -23,7 +23,6 @@ let listenersStarted = false;
 let purchaseUpdatedSub: { remove: () => void } | null = null;
 let purchaseErrorSub: { remove: () => void } | null = null;
 const alertedTransactionIds = new Set<string>();
-const debugAlertedTransactionIds = new Set<string>();
 
 let billingReady = false;
 let connectingPromise: Promise<boolean> | null = null;
@@ -55,6 +54,29 @@ export function subscribePurchaseUiIdle(cb: PurchaseUiIdleListener): () => void 
   };
 }
 
+/** DB grant(ok=true) 직후 상점 등에서 보유 재화만 가볍게 갱신할 때 사용 — 실패해도 지급/finish는 진행 */
+type IapGrantSuccessListener = () => void | Promise<void>;
+const iapGrantSuccessListeners = new Set<IapGrantSuccessListener>();
+
+function emitIapGrantSuccessRefetch(): void {
+  iapGrantSuccessListeners.forEach((cb) => {
+    try {
+      void Promise.resolve(cb()).catch((e) => {
+        console.warn('[RNIAP] IAP grant success refetch listener failed', e);
+      });
+    } catch (e) {
+      console.warn('[RNIAP] IAP grant success refetch listener threw', e);
+    }
+  });
+}
+
+export function subscribeIapGrantSuccess(cb: IapGrantSuccessListener): () => void {
+  iapGrantSuccessListeners.add(cb);
+  return () => {
+    iapGrantSuccessListeners.delete(cb);
+  };
+}
+
 // react-native-iap native(iOS)는 같은 purchaseUpdated 이벤트를 dedup 한 뒤
 // "Duplicate purchase update skipped ..." 메시지의 purchaseError를 보낸다.
 // 그런 케이스나, grant 단계에서 DB transactionId가 이미 있어 duplicate으로 떨어지는 케이스는
@@ -80,18 +102,6 @@ function isAuthSessionMissingError(input: { code?: string | null; message?: stri
   return msg.includes('auth session missing');
 }
 
-function debugIapAlert(transactionId: string, step: string, detail?: string): void {
-  // 임시 진단용: 같은 transactionId에 대해 과도한 Alert 반복 방지
-  const key = `${transactionId}:${step}`;
-  if (debugAlertedTransactionIds.has(key)) return;
-  debugAlertedTransactionIds.add(key);
-  try {
-    Alert.alert('IAP DEBUG', detail ? `${step}\n${detail}` : step);
-  } catch {
-    // ignore
-  }
-}
-
 type ProcessResult =
   | { status: 'no_session'; transactionId: string; productId: string }
   | { status: 'grant_failed'; transactionId: string; productId: string; message: string; kind?: string }
@@ -102,18 +112,11 @@ async function processPurchaseLikeListener(purchase: Purchase, source: string): 
   const productId = String((purchase as any)?.productId ?? '').trim();
   const transactionId = extractIosTransactionId(purchase);
 
-  debugIapAlert(transactionId, 'listener received', `source=${source}\nproductId=${productId || '(missing)'}`);
-
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
   if (authError || !user?.id) {
-    debugIapAlert(
-      transactionId,
-      'userId missing',
-      `source=${source}\nproductId=${productId || '(missing)'}\nauthError=${String((authError as any)?.message ?? '')}`
-    );
     console.log('[RNIAP] skip purchase update without auth session', {
       transactionId,
       productId,
@@ -123,21 +126,12 @@ async function processPurchaseLikeListener(purchase: Purchase, source: string): 
     return { status: 'no_session', transactionId, productId };
   }
 
-  debugIapAlert(transactionId, 'userId ok', `source=${source}\nuserId=${user.id}`);
-  debugIapAlert(transactionId, 'grant start', `source=${source}`);
-
   const grantRes = await grantAppleIapAndRecord({
     userId: user.id,
     productId,
     transactionId,
     productRow: null,
   });
-
-  debugIapAlert(
-    transactionId,
-    'grant result',
-    `source=${source}\nok=${String((grantRes as any)?.ok)} kind=${String((grantRes as any)?.kind ?? '')}`
-  );
 
   if (!grantRes.ok) {
     // duplicate 결과는 지급 스킵 + finishTransaction 가능 (이미 DB 기록 있음)
@@ -150,17 +144,10 @@ async function processPurchaseLikeListener(purchase: Purchase, source: string): 
         message: grantRes.message,
       });
 
-      debugIapAlert(transactionId, 'finish start', `source=${source}\nreason=duplicate`);
       try {
         await finishTransaction(purchase, productId);
-        debugIapAlert(transactionId, 'finish done', `source=${source}\nreason=duplicate`);
       } catch (finishErr: any) {
         console.error('[RNIAP] finishTransaction failed after duplicate grant', finishErr);
-        debugIapAlert(
-          transactionId,
-          'finish error',
-          `source=${source}\nreason=duplicate\n${String(finishErr?.message ?? finishErr ?? 'finishTransaction error')}`
-        );
         Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
         // duplicate인데 finish 실패하면 pending이 계속될 수 있으니 결과는 duplicate_finished로는 처리하지 않음
         throw finishErr;
@@ -178,14 +165,13 @@ async function processPurchaseLikeListener(purchase: Purchase, source: string): 
     return { status: 'grant_failed', transactionId, productId, message, kind };
   }
 
+  emitIapGrantSuccessRefetch();
+
   // DB 지급 성공 후에만 finishTransaction
-  debugIapAlert(transactionId, 'finish start', `source=${source}`);
   try {
     await finishTransaction(purchase, productId);
-    debugIapAlert(transactionId, 'finish done', `source=${source}`);
   } catch (finishErr: any) {
     console.error('[RNIAP] finishTransaction failed after grant', finishErr);
-    debugIapAlert(transactionId, 'finish error', `source=${source}\n${String(finishErr?.message ?? finishErr ?? 'finishTransaction error')}`);
     Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
     throw finishErr;
   }
@@ -268,12 +254,10 @@ export async function getAvailablePurchases(): Promise<Purchase[]> {
 
 export async function debugReprocessPendingPurchases(): Promise<void> {
   if (Platform.OS !== 'ios') return;
-  debugIapAlert('pending', 'reprocess start');
   try {
     const purchases = await getAvailablePurchases();
-    debugIapAlert('pending', 'available purchases', `count=${purchases.length}`);
     if (purchases.length === 0) {
-      Alert.alert('Pending Reprocess', '처리할 pending purchase가 없습니다.');
+      console.log('[RNIAP] pending reprocess: no available purchases');
       return;
     }
 
@@ -291,8 +275,7 @@ export async function debugReprocessPendingPurchases(): Promise<void> {
             return '(missing)';
           }
         })();
-        debugIapAlert(tid, 'listener error', msg || '(no message)');
-        Alert.alert('Pending Reprocess', `error\ntransactionId=${tid}\n${msg}`);
+        console.error('[RNIAP] pending reprocess item error', { tid, msg });
         results.push({ status: 'grant_failed', transactionId: tid, productId: String((p as any)?.productId ?? '').trim() });
       }
     }
@@ -306,15 +289,10 @@ export async function debugReprocessPendingPurchases(): Promise<void> {
       { total: 0 } as any
     );
 
-    Alert.alert(
-      'Pending Reprocess 완료',
-      `total=${summary.total}\nfinished=${summary.finished ?? 0}\nduplicate_finished=${summary.duplicate_finished ?? 0}\nno_session=${
-        summary.no_session ?? 0
-      }\ngrant_failed=${summary.grant_failed ?? 0}`
-    );
+    console.log('[RNIAP] pending reprocess done', summary);
   } catch (e: any) {
     const msg = String(e?.message ?? e ?? '');
-    Alert.alert('Pending Reprocess', msg || 'pending reprocess error');
+    console.error('[RNIAP] pending reprocess failed', msg);
   }
 }
 
@@ -358,18 +336,9 @@ export async function debugClearTransactionQueueIOS(): Promise<void> {
     }
 
     console.log('[IAP] clearTransactionIOS success');
-    Alert.alert('완료', 'Transaction queue cleared');
   } catch (e: any) {
     console.error('[IAP] clearTransactionIOS failed', e);
     billingReady = false;
-    Alert.alert(
-      'clearTransactionIOS error',
-      JSON.stringify({
-        message: e?.message,
-        code: e?.code,
-        name: e?.name,
-      })
-    );
   }
 }
 
@@ -404,10 +373,8 @@ export async function requestPurchase(productId: string): Promise<void> {
       },
     },
   };
-  console.log('[IAP] rnRequestPurchase payload', payload);
   try {
-    const result = await rnRequestPurchase(payload as any);
-    console.log('[IAP] rnRequestPurchase returned', result);
+    await rnRequestPurchase(payload as any);
   } catch (e: any) {
     console.error('[IAP] requestPurchase throw', e);
     throw e;
@@ -434,13 +401,10 @@ export function startListeners(): void {
           transactionId,
           productId,
         });
-        debugIapAlert(transactionId, 'finish start', 'reason=already processed in session');
         try {
           await finishTransaction(purchase, productId);
-          debugIapAlert(transactionId, 'finish done', 'reason=already processed in session');
         } catch (finishErr: any) {
           console.log('[RNIAP] duplicate skipped finishTransaction error', finishErr);
-          debugIapAlert(transactionId, 'finish error', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
           Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
         }
         return;
@@ -461,7 +425,6 @@ export function startListeners(): void {
       await processPurchaseLikeListener(purchase, 'listener');
     } catch (e: any) {
       const msg = String(e?.message ?? e ?? '');
-      debugIapAlert(transactionId || '(missing)', 'listener error', msg || '(no message)');
       if (isAuthSessionMissingError({ code: e?.code, message: msg })) {
         console.log('[RNIAP] skip purchase update without auth session', {
           transactionId,
@@ -494,16 +457,7 @@ export function startListeners(): void {
     const message = String((error as any)?.message ?? '');
     const skuFromErr = String((error as any)?.productId ?? (error as any)?.sku ?? '').trim();
 
-    // TEMP 디버그: 모든 purchase error를 Alert로 노출해 결제창 미출현 원인 확인
     console.error('[IAP] purchaseErrorListener', error);
-    Alert.alert(
-      'purchaseErrorListener',
-      JSON.stringify({
-        message,
-        code,
-        productId: skuFromErr,
-      })
-    );
 
     const lowerMsg = message.toLowerCase();
     if (lowerMsg.includes('billing is not prepared')) {
@@ -550,7 +504,12 @@ export async function finishTransaction(purchase: Purchase, productId?: string):
   if (Platform.OS !== 'ios') return;
   const pid = String(productId ?? (purchase as any)?.productId ?? '').trim();
   const isConsumable = getIsConsumable(pid);
-  await rnFinishTransaction({ purchase, isConsumable } as any);
+  try {
+    await rnFinishTransaction({ purchase, isConsumable } as any);
+  } catch (e: any) {
+    console.error('[RNIAP] rnFinishTransaction failed', { pid, e });
+    throw e;
+  }
 }
 
 export function extractIosTransactionId(purchase: Purchase): string {

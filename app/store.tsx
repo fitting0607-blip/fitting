@@ -18,11 +18,9 @@ import { supabase } from '@/supabase';
 import {
   requestPurchase,
   isDuplicateLikeError,
-  fetchProducts,
-  debugClearTransactionQueueIOS,
   subscribePurchaseUiIdle,
+  subscribeIapGrantSuccess,
 } from '@/iap/rniap';
-import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
 
 const MAIN = '#6C47FF';
 
@@ -50,11 +48,9 @@ export default function StoreScreen() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [tab, setTab] = useState<'matching' | 'pt'>('matching');
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
-  const [lastBuyStep, setLastBuyStep] = useState<string>('(none)');
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
-  const [pendingReprocessLoading, setPendingReprocessLoading] = useState(false);
 
   const purchasingWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearPurchasingWatchdog = useCallback(() => {
@@ -71,7 +67,7 @@ export default function StoreScreen() {
     });
   }, [clearPurchasingWatchdog]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     setLoading(true);
     try {
       const {
@@ -95,13 +91,23 @@ export default function StoreScreen() {
       setPoints(typeof row?.points === 'number' ? row.points : 0);
       setMatchingTickets(typeof row?.matching_tickets === 'number' ? row.matching_tickets : 0);
     } catch (e: any) {
-      Alert.alert('불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
-      setPoints(null);
-      setMatchingTickets(null);
+      if (opts?.silent) {
+        console.warn('[STORE] load failed after IAP grant refetch', e);
+      } else {
+        Alert.alert('불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
+        setPoints(null);
+        setMatchingTickets(null);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    return subscribeIapGrantSuccess(() => {
+      void load({ silent: true });
+    });
+  }, [load]);
 
   const loadProducts = useCallback(async (category: 'ticket' | 'matching_ticket' | 'pt_ticket') => {
     setProductsLoading(true);
@@ -191,19 +197,6 @@ export default function StoreScreen() {
 
         const rows = (data ?? []) as any[];
 
-        // 3개/5개 결제창 미출현 진단용 row 비교 로그
-        console.log(
-          '[STORE] DB matching products',
-          rows.map((r) => ({
-            title: r?.title,
-            apple_product_id: String(r?.apple_product_id ?? '').trim(),
-            price: r?.price,
-            ticket_count: r?.ticket_count,
-            is_active: r?.is_active,
-            category: r?.category ?? category,
-          }))
-        );
-
         const mapped: StoreItem[] = rows
           .filter((r) => !!r?.id)
           .map((r) => ({
@@ -223,27 +216,6 @@ export default function StoreScreen() {
       const primary = await run('ticket');
       const finalProducts = primary.length > 0 ? primary : await run('matching_ticket');
       setProducts(finalProducts);
-
-      if (Platform.OS === 'ios') {
-        // 3개/5개 결제창 미출현 진단: 매칭권 탭 진입 시 App Store 측 조회 결과를 로그로 남긴다.
-        // - DB row 와 fetchProducts 결과의 SKU를 비교하면 어느 쪽 누락인지 한눈에 보인다.
-        const matchingSkus = APPLE_PRODUCT_IDS.matchingTickets.map((s) => String(s).trim());
-        try {
-          const fetched = await fetchProducts(matchingSkus);
-          const fetchedIds = fetched.map((p: any) => String(p?.id ?? p?.productId ?? '').trim());
-          const dbSkus = finalProducts.map((r) => r.apple_product_id);
-          const missingOnStore = matchingSkus.filter((s) => !fetchedIds.includes(s));
-          const missingInDb = matchingSkus.filter((s) => !dbSkus.includes(s));
-          console.log('[STORE] iap diagnostics (matching)', {
-            dbSkus,
-            fetchedIds,
-            missingOnStore,
-            missingInDb,
-          });
-        } catch (diagErr) {
-          console.warn('[STORE] iap diagnostics fetch failed', diagErr);
-        }
-      }
     } catch (e: any) {
       Alert.alert('상품 불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       setProducts([]);
@@ -299,54 +271,25 @@ export default function StoreScreen() {
     }, [load, loadMyPt, loadProducts, loadMatchingProducts, tab])
   );
 
-  /** TEMP App Store 제출 전 제거: 화면 포커스 시 purchasingSku 상태 로그 */
-  useFocusEffect(
-    useCallback(() => {
-      console.log('[STORE] initial purchasingSku', purchasingSku);
-    }, [purchasingSku])
-  );
-
   const goBack = useCallback(() => router.back(), [router]);
-
-  const onPendingReprocess = useCallback(async () => {
-    if (Platform.OS !== 'ios') return;
-    if (pendingReprocessLoading) return;
-    setPendingReprocessLoading(true);
-    try {
-      // TEMP 디버그 전용: 운영 자동 실행 금지, 구매 직전 자동 실행 금지
-      await debugClearTransactionQueueIOS();
-    } catch (e: any) {
-      Alert.alert('Pending Reprocess', String(e?.message ?? e ?? 'pending reprocess error'));
-    } finally {
-      setPendingReprocessLoading(false);
-    }
-  }, [pendingReprocessLoading]);
 
   const onBuyMatchingTicket = useCallback(
     async (item: StoreItem) => {
       if (tab !== 'matching') {
-        setLastBuyStep('tab mismatch');
-        console.log('[STORE] onBuyMatchingTicket:', 'tab mismatch');
-        Alert.alert('구매 불가', 'tab mismatch');
+        Alert.alert('구매 불가', '다시 시도해주세요.');
         return;
       }
       if (Platform.OS !== 'ios') {
-        setLastBuyStep('non-ios');
-        console.log('[STORE] onBuyMatchingTicket:', 'non-ios');
         Alert.alert('안내', '현재 iOS에서만 인앱결제를 지원합니다.');
         return;
       }
       const sku = item.apple_product_id?.trim();
       if (!sku) {
-        setLastBuyStep('missing sku');
-        console.log('[STORE] onBuyMatchingTicket:', 'missing sku');
         Alert.alert('구매 불가', '상품 정보가 올바르지 않습니다.');
         return;
       }
       if (purchasingSku) {
-        setLastBuyStep('purchasingSku blocked');
-        console.log('[STORE] onBuyMatchingTicket:', 'purchasingSku blocked');
-        Alert.alert('구매 불가', 'purchasingSku blocked');
+        Alert.alert('안내', '결제 처리 중입니다. 잠시 후 다시 시도해주세요.');
         return;
       }
       clearPurchasingWatchdog();
@@ -356,30 +299,14 @@ export default function StoreScreen() {
       }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
-          setLastBuyStep('premium blocked');
-          console.log('[STORE] onBuyMatchingTicket:', 'premium blocked');
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
           return;
         }
-        setLastBuyStep('requestPurchase start');
-        console.log('[STORE] onBuyMatchingTicket:', 'requestPurchase start');
         await requestPurchase(sku);
-        setLastBuyStep('requestPurchase returned');
-        console.log('[STORE] onBuyMatchingTicket:', 'requestPurchase returned');
       } catch (e: any) {
-        setLastBuyStep('catch error');
         console.error('[STORE] onBuyMatchingTicket catch', e);
-        Alert.alert(
-          'catch error',
-          JSON.stringify({
-            message: e?.message,
-            code: e?.code,
-            name: e?.name,
-          })
-        );
+        Alert.alert('구매 실패', String(e?.message ?? e ?? '구매 중 오류가 발생했습니다.'));
       } finally {
-        setLastBuyStep('finally reset');
-        console.log('[STORE] onBuyMatchingTicket:', 'finally reset');
         clearPurchasingWatchdog();
         setPurchasingSku(null);
       }
@@ -460,47 +387,11 @@ export default function StoreScreen() {
         <View style={styles.headerBtn} />
       </View>
 
-      {/* TEMP App Store 제출 전 제거: purchasingSku stuck 진단 */}
-      <View style={styles.debugPurchasingSkuBar}>
-        <View style={styles.debugPurchasingSkuLeft}>
-          <Text style={styles.debugPurchasingSkuText} selectable>
-            purchasingSku: {purchasingSku ?? 'null'}
-          </Text>
-          <Text style={styles.debugPurchasingSkuText} selectable>
-            lastBuyStep: {lastBuyStep}
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => setPurchasingSku(null)}
-          style={styles.debugPurchasingSkuResetBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Reset SKU"
-        >
-          <Text style={styles.debugPurchasingSkuResetBtnText}>Reset SKU</Text>
-        </Pressable>
-      </View>
-
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {Platform.OS === 'ios' ? (
-          <Pressable
-            onPress={() => void onPendingReprocess()}
-            disabled={pendingReprocessLoading}
-            style={({ pressed }) => [
-              styles.pendingBtn,
-              pressed && styles.pendingBtnPressed,
-              pendingReprocessLoading && styles.pendingBtnDisabled,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Pending Reprocess"
-          >
-            <Text style={styles.pendingBtnText}>{pendingReprocessLoading ? 'Pending Reprocess…' : 'Pending Reprocess'}</Text>
-          </Pressable>
-        ) : null}
-
         {loading ? (
           <View style={styles.topCardLoading}>
             <ActivityIndicator size="small" color="#FFFFFF" />
@@ -565,7 +456,6 @@ export default function StoreScreen() {
                   }
                 : {
                     onPress: () => {
-                      console.log('[STORE] matching row click', { purchasingSku, productId: item.apple_product_id });
                       void onBuyMatchingTicket(item);
                     },
                     style: ({ pressed }: { pressed: boolean }) =>
@@ -671,61 +561,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111111',
   },
-  debugPurchasingSkuBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#FEF3C7',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#FCD34D',
-  },
-  debugPurchasingSkuLeft: {
-    flex: 1,
-    gap: 2,
-  },
-  debugPurchasingSkuText: {
-    flex: 1,
-    fontSize: 11,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    color: '#92400E',
-  },
-  debugPurchasingSkuResetBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#111111',
-  },
-  debugPurchasingSkuResetBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 32,
-  },
-  pendingBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#111111',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-  pendingBtnPressed: {
-    opacity: 0.92,
-  },
-  pendingBtnDisabled: {
-    opacity: 0.6,
-  },
-  pendingBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
   },
   topCard: {
     flexDirection: 'row',
