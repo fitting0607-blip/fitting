@@ -346,10 +346,22 @@ export async function debugClearTransactionQueueIOS(): Promise<void> {
         isConsumable: true,
       } as any);
     }
+
+    // Drop StoreKit/IAP connection after queue cleanup, then reconnect for a fresh session.
+    await endConnection();
+    billingReady = false;
+
+    const okAfter = await initConnection();
+    if (!okAfter) {
+      billingReady = false;
+      throw new Error('initConnection failed after queue clear (reconnect)');
+    }
+
     console.log('[IAP] clearTransactionIOS success');
     Alert.alert('완료', 'Transaction queue cleared');
   } catch (e: any) {
-    console.log('[IAP] clearTransactionIOS failed', e);
+    console.error('[IAP] clearTransactionIOS failed', e);
+    billingReady = false;
     Alert.alert(
       'clearTransactionIOS error',
       JSON.stringify({
