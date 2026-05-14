@@ -15,6 +15,7 @@ const items: NavItem[] = [
 
   { kind: 'section', label: '고객 센터' },
   { kind: 'link', to: '/reports', label: '신고목록' },
+  { kind: 'link', to: '/gathering-applications', label: '소모임 신청' },
 
   { kind: 'section', label: '결제 관리' },
   { kind: 'link', to: '/payments', label: '결제 정보 관리' },

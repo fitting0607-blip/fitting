@@ -12,6 +12,7 @@ import { ProductsPage } from '../views/ProductsPage'
 import { BannersPage } from '../views/BannersPage'
 import { TermsPage } from '../views/TermsPage'
 import { PaymentsPage } from '../views/PaymentsPage'
+import { GatheringApplicationsPage } from '../views/GatheringApplicationsPage'
 
 export function AppRouter() {
   return (
@@ -37,6 +38,10 @@ export function AppRouter() {
             <Route path="/banners" element={<BannersPage />} />
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/payments" element={<PaymentsPage />} />
+            <Route
+              path="/gathering-applications"
+              element={<GatheringApplicationsPage />}
+            />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
