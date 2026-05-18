@@ -329,6 +329,7 @@
 - (2026-05-14) iOS IAP 결제창 미출현 대응: `iap/rniap.ts`의 `debugClearTransactionQueueIOS`에서 pending 정리 후 `endConnection()` → `billingReady = false` → `initConnection()` 순으로 StoreKit/IAP fresh connection 재연결 (수동 호출용, 운영 자동 실행 없음)
 - (2026-05-14) IAP DB 지급 성공(`grantAppleIapAndRecord` ok=true) 직후 상점 보유 매칭권/포인트 자동 갱신: `iap/rniap.ts`의 `subscribeIapGrantSuccess` 이벤트 + `app/store.tsx` 기존 `load({ silent: true })` 재사용, 갱신 실패는 `console.warn`만 (지급/finish 흐름 차단 없음)
 - (2026-05-14) IAP/상점 디버그 정리: `app/store.tsx`·`iap/rniap.ts`에서 IAP DEBUG Alert, BUYDBG emit/구독·Pending Reprocess/lastBuyStep 바·Reset SKU 등 화면 디버그 제거, `debugClearTransactionQueueIOS`는 큐 정리+재연결 유지·내부 성공/실패 Alert만 제거
+- (2026-05-18) IAP lifecycle 안정화: `onBuyMatchingTicket` 이벤트 기반 패턴으로 수정, `requestPurchase` 내부 connection 보장, Store 진입 시 `ensureIapReady` 선제 호출, `getProducts` SKU 검증 추가
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정

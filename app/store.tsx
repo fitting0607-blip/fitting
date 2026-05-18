@@ -20,6 +20,7 @@ import {
   isDuplicateLikeError,
   subscribePurchaseUiIdle,
   subscribeIapGrantSuccess,
+  ensureIapReady,
 } from '@/iap/rniap';
 
 const MAIN = '#6C47FF';
@@ -259,6 +260,15 @@ export default function StoreScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (Platform.OS === 'ios') {
+        void ensureIapReady().then((ok) => {
+          if (ok) {
+            console.log('[STORE] IAP pre-init ok');
+          } else {
+            console.warn('[STORE] IAP pre-init failed (non-blocking)');
+          }
+        });
+      }
       void load();
       void loadMyPt();
       void (async () => {
@@ -300,15 +310,25 @@ export default function StoreScreen() {
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
+          clearPurchasingWatchdog();
+          setPurchasingSku(null);
           return;
         }
+        console.log('[STORE] matching requestPurchase start', { sku });
         await requestPurchase(sku);
+        console.log('[STORE] matching requestPurchase returned', { sku });
       } catch (e: any) {
-        console.error('[STORE] onBuyMatchingTicket catch', e);
-        Alert.alert('구매 실패', String(e?.message ?? e ?? '구매 중 오류가 발생했습니다.'));
-      } finally {
+        console.error('[STORE] matching requestPurchase catch', e);
+        const msg = String(e?.message ?? e ?? '');
+        if (isDuplicateLikeError({ code: e?.code, message: msg })) {
+          console.log('[RNIAP] duplicate skipped', { from: 'store onBuyMatchingTicket', sku, msg });
+          clearPurchasingWatchdog();
+          setPurchasingSku(null);
+          return;
+        }
         clearPurchasingWatchdog();
         setPurchasingSku(null);
+        Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
       }
     },
     [tab, purchasingSku, clearPurchasingWatchdog]
@@ -339,20 +359,25 @@ export default function StoreScreen() {
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
+          clearPurchasingWatchdog();
+          setPurchasingSku(null);
           return;
         }
+        console.log('[STORE] pt requestPurchase start', { sku });
         await requestPurchase(sku);
+        console.log('[STORE] pt requestPurchase returned', { sku });
       } catch (e: any) {
         const msg = String(e?.message ?? e ?? '');
         if (isDuplicateLikeError({ code: e?.code, message: msg })) {
           console.log('[RNIAP] duplicate skipped', { from: 'store onBuyPtTicket', sku, msg });
+          clearPurchasingWatchdog();
+          setPurchasingSku(null);
           return;
         }
-        console.error('[STORE] purchase error', e);
-        Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
-      } finally {
+        console.error('[STORE] pt requestPurchase catch', e);
         clearPurchasingWatchdog();
         setPurchasingSku(null);
+        Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
       }
     },
     [tab, myPtEligible, purchasingSku, clearPurchasingWatchdog]

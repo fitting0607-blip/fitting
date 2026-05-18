@@ -198,6 +198,9 @@ export async function initConnection(): Promise<boolean> {
     try {
       const ok = await rnInitConnection();
       billingReady = Boolean(ok);
+      if (!billingReady) {
+        console.warn('[RNIAP] initConnection native returned false');
+      }
       return billingReady;
     } catch (e) {
       billingReady = false;
@@ -209,6 +212,22 @@ export async function initConnection(): Promise<boolean> {
   })();
 
   return await connectingPromise;
+}
+
+/** Store 진입 등 선제 초기화 — 실패해도 throw 하지 않음 */
+export async function ensureIapReady(): Promise<boolean> {
+  if (Platform.OS !== 'ios') return false;
+  try {
+    const ok = await initConnection();
+    if (!ok) {
+      console.warn('[RNIAP] ensureIapReady: connection not ready');
+    }
+    return ok;
+  } catch (e) {
+    billingReady = false;
+    console.error('[RNIAP] ensureIapReady error', e);
+    return false;
+  }
 }
 
 export async function endConnection(): Promise<void> {
@@ -225,6 +244,11 @@ export async function endConnection(): Promise<void> {
 export async function fetchProducts(productIds: readonly string[] = getAllAppleProductIds()): Promise<Product[]> {
   if (Platform.OS !== 'ios') return [];
   try {
+    const ok = await initConnection();
+    if (!ok) {
+      console.warn('[RNIAP] fetchProducts skipped: billing not ready');
+      return [];
+    }
     const ids = productIds.map((x) => String(x ?? '').trim()).filter(Boolean);
     const products = (await rnFetchProducts({ skus: ids, type: 'in-app' } as any)) as Product[] | null | undefined;
     const list = (products ?? []) as Product[];
@@ -233,6 +257,18 @@ export async function fetchProducts(productIds: readonly string[] = getAllAppleP
     console.error('[RNIAP] fetchProducts error', e);
     return [];
   }
+}
+
+/** fetchProducts 별칭 — requestPurchase 직전 SKU 검증용 */
+export const getProducts = fetchProducts;
+
+function getProductLogFields(p: Product): { productId: string; title: string; price: string } {
+  const productId = getProductIdFromProduct(p);
+  const title = String((p as any)?.title ?? (p as any)?.name ?? '').trim();
+  const price = String(
+    (p as any)?.displayPrice ?? (p as any)?.localizedPrice ?? (p as any)?.price ?? ''
+  ).trim();
+  return { productId, title, price };
 }
 
 export async function getAvailablePurchases(): Promise<Purchase[]> {
@@ -347,6 +383,16 @@ export function getProductIdFromProduct(p: Product | null | undefined): string {
   return String((p as any)?.id ?? (p as any)?.productId ?? '').trim();
 }
 
+async function invalidateBillingConnection(reason: string): Promise<void> {
+  console.warn('[RNIAP] invalidateBillingConnection', { reason });
+  try {
+    await endConnection();
+  } catch (e) {
+    console.error('[RNIAP] invalidateBillingConnection endConnection error', e);
+    billingReady = false;
+  }
+}
+
 export async function requestPurchase(productId: string): Promise<void> {
   if (Platform.OS !== 'ios') {
     return;
@@ -361,6 +407,18 @@ export async function requestPurchase(productId: string): Promise<void> {
   if (!ok) {
     throw new Error('결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
   }
+
+  const storeProducts = await getProducts([sku]);
+  const matched = storeProducts.find((p) => getProductIdFromProduct(p) === sku);
+  if (!matched) {
+    const listed = storeProducts.map((p) => getProductLogFields(p));
+    console.error('[RNIAP] requestPurchase: sku not in App Store products', { sku, listed });
+    Alert.alert('상품 조회 실패', `App Store에서 상품을 찾을 수 없습니다.\n(${sku})`);
+    throw new Error(`Product not found on App Store: ${sku}`);
+  }
+
+  const { productId: validatedId, title, price } = getProductLogFields(matched);
+  console.log('[RNIAP] requestPurchase product validated', { productId: validatedId, title, price });
 
   // Ensure we always finish manually only after DB grant succeeds.
   // react-native-iap v8+ (current: v15) expects an object payload.
@@ -377,6 +435,7 @@ export async function requestPurchase(productId: string): Promise<void> {
     await rnRequestPurchase(payload as any);
   } catch (e: any) {
     console.error('[IAP] requestPurchase throw', e);
+    await invalidateBillingConnection('requestPurchase failed');
     throw e;
   }
 }
