@@ -105,6 +105,19 @@ function isAuthSessionMissingError(input: { code?: string | null; message?: stri
   return msg.includes('auth session missing');
 }
 
+function isUserCancelLikeError(input: { code?: string | null; message?: string | null }): boolean {
+  const code = String(input?.code ?? '').toLowerCase();
+  const msg = String(input?.message ?? '').toLowerCase();
+  if (code.includes('cancel') || code.includes('e_user_cancelled')) return true;
+  if (!msg) return false;
+  return (
+    msg.includes('cancel') ||
+    msg.includes('cancelled') ||
+    msg.includes('user cancelled') ||
+    msg.includes('e_user_cancelled')
+  );
+}
+
 type ProcessResult =
   | { status: 'no_session'; transactionId: string; productId: string }
   | { status: 'grant_failed'; transactionId: string; productId: string; message: string; kind?: string }
@@ -523,6 +536,7 @@ export function startListeners(): void {
     if (lowerMsg.includes('billing is not prepared')) {
       if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
       Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
+      return;
     }
 
     // native(iOS)에서 중복 purchaseUpdated 이벤트를 감지했을 때 보내는 duplicate-purchase 에러는
@@ -533,17 +547,26 @@ export function startListeners(): void {
         code,
         message,
       });
+      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+      return;
     }
 
     if (isAuthSessionMissingError({ code, message })) {
       console.log('[RNIAP] skip purchase error without auth session', { code, message });
+      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+      return;
+    }
+
+    if (isUserCancelLikeError({ code, message })) {
+      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+      return;
     }
 
     if (skuFromErr) {
       emitPurchaseUiIdle(skuFromErr);
     }
 
-    Alert.alert('결제 오류', message || '결제 중 오류가 발생했습니다.');
+    Alert.alert('결제 오류', IAP_PURCHASE_USER_MESSAGE);
   });
 }
 

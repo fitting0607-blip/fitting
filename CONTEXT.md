@@ -346,6 +346,11 @@
   - 구매 실패 Alert 메시지 SKU 노출 없이 일반 문구로 통일
   - `purchasingSku` 해제 로직 catch에서 보장
   - 변경 파일: iap/rniap.ts, app/store.tsx
+- (2026-05-19) purchaseErrorListener 분기 버그 수정 (duplicate/auth/cancel 원문 에러 노출 방지)
+  - purchaseErrorListener 분기 버그 수정 (return 누락)
+  - isUserCancelLikeError 헬퍼 추가, 취소 시 Alert 없이 return
+  - 모든 에러 Alert 메시지 IAP_PURCHASE_USER_MESSAGE로 통일
+  - 변경 파일: iap/rniap.ts
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정
