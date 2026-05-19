@@ -19,6 +19,9 @@ import { supabase } from '@/supabase';
 import { grantAppleIapAndRecord } from '@/iap/grant';
 import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
 
+/** App Store Review: SKU/productId를 사용자 Alert에 노출하지 않음 */
+export const IAP_PURCHASE_USER_MESSAGE = '구매를 진행할 수 없습니다. 잠시 후 다시 시도해주세요.';
+
 let listenersStarted = false;
 let purchaseUpdatedSub: { remove: () => void } | null = null;
 let purchaseErrorSub: { remove: () => void } | null = null;
@@ -410,16 +413,13 @@ export async function requestPurchase(productId: string): Promise<void> {
 
   const storeProducts = await getProducts([sku]);
   const matched = storeProducts.find((p) => getProductIdFromProduct(p) === sku);
-  if (!matched) {
-    const listed = storeProducts.map((p) => getProductLogFields(p));
-    console.warn('[RNIAP] requestPurchase: sku not returned by fetchProducts (continuing)', {
-      sku,
-      listedCount: listed.length,
-    });
-  } else {
-    const { productId: validatedId, title, price } = getProductLogFields(matched);
-    console.log('[RNIAP] requestPurchase product validated', { productId: validatedId, title, price });
+  if (storeProducts.length === 0 || !matched) {
+    console.warn('[IAP] product validation empty', sku);
+    throw new Error(IAP_PURCHASE_USER_MESSAGE);
   }
+
+  const { productId: validatedId, title, price } = getProductLogFields(matched);
+  console.log('[RNIAP] requestPurchase product validated', { productId: validatedId, title, price });
 
   // Ensure we always finish manually only after DB grant succeeds.
   // react-native-iap v8+ (current: v15) expects an object payload.

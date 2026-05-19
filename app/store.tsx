@@ -21,11 +21,15 @@ import {
   subscribePurchaseUiIdle,
   subscribeIapGrantSuccess,
   ensureIapReady,
+  IAP_PURCHASE_USER_MESSAGE,
 } from '@/iap/rniap';
 
 const MAIN = '#6C47FF';
 
-const IAP_PURCHASE_USER_MESSAGE = '구매를 진행할 수 없습니다. 잠시 후 다시 시도해주세요.';
+function purchaseAlertMessage(e: unknown): string {
+  const msg = String((e as { message?: string })?.message ?? '').trim();
+  return msg === IAP_PURCHASE_USER_MESSAGE ? msg : IAP_PURCHASE_USER_MESSAGE;
+}
 
 /** requestPurchase 프로미스가 해결되지 않을 때 purchasingSku 고착 방지 (이벤트 기반 IAP) */
 const PURCHASE_SKU_STUCK_TIMEOUT_MS = 120_000;
@@ -330,7 +334,7 @@ export default function StoreScreen() {
         }
         clearPurchasingWatchdog();
         setPurchasingSku(null);
-        Alert.alert('구매 실패', IAP_PURCHASE_USER_MESSAGE);
+        Alert.alert('구매 실패', purchaseAlertMessage(e));
       }
     },
     [tab, purchasingSku, clearPurchasingWatchdog]
@@ -379,7 +383,7 @@ export default function StoreScreen() {
         console.error('[STORE] pt requestPurchase catch', e);
         clearPurchasingWatchdog();
         setPurchasingSku(null);
-        Alert.alert('구매 실패', IAP_PURCHASE_USER_MESSAGE);
+        Alert.alert('구매 실패', purchaseAlertMessage(e));
       }
     },
     [tab, myPtEligible, purchasingSku, clearPurchasingWatchdog]

@@ -341,6 +341,11 @@
   - app/store.tsx 구매 catch: 사용자 Alert "구매를 진행할 수 없습니다. 잠시 후 다시 시도해주세요."로 통일
   - SKU/productId 원문 에러 메시지 사용자 노출 제거 (상품 조회 실패 Alert 제거)
   - 변경 파일: iap/rniap.ts, app/store.tsx
+- (2026-05-19) IAP getProducts 빈 배열 시 구매 차단 및 사용자 메시지 일반화 (build 54 무한 로딩 대응)
+  - IAP getProducts 빈 배열 시 `IAP_PURCHASE_USER_MESSAGE`로 throw, `rnRequestPurchase` 차단
+  - 구매 실패 Alert 메시지 SKU 노출 없이 일반 문구로 통일
+  - `purchasingSku` 해제 로직 catch에서 보장
+  - 변경 파일: iap/rniap.ts, app/store.tsx
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정
