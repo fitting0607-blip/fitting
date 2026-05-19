@@ -25,6 +25,8 @@ import {
 
 const MAIN = '#6C47FF';
 
+const IAP_PURCHASE_USER_MESSAGE = '구매를 진행할 수 없습니다. 잠시 후 다시 시도해주세요.';
+
 /** requestPurchase 프로미스가 해결되지 않을 때 purchasingSku 고착 방지 (이벤트 기반 IAP) */
 const PURCHASE_SKU_STUCK_TIMEOUT_MS = 120_000;
 
@@ -328,7 +330,7 @@ export default function StoreScreen() {
         }
         clearPurchasingWatchdog();
         setPurchasingSku(null);
-        Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
+        Alert.alert('구매 실패', IAP_PURCHASE_USER_MESSAGE);
       }
     },
     [tab, purchasingSku, clearPurchasingWatchdog]
@@ -377,7 +379,7 @@ export default function StoreScreen() {
         console.error('[STORE] pt requestPurchase catch', e);
         clearPurchasingWatchdog();
         setPurchasingSku(null);
-        Alert.alert('구매 실패', msg || '구매 중 오류가 발생했습니다.');
+        Alert.alert('구매 실패', IAP_PURCHASE_USER_MESSAGE);
       }
     },
     [tab, myPtEligible, purchasingSku, clearPurchasingWatchdog]

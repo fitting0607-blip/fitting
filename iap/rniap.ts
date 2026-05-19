@@ -412,13 +412,14 @@ export async function requestPurchase(productId: string): Promise<void> {
   const matched = storeProducts.find((p) => getProductIdFromProduct(p) === sku);
   if (!matched) {
     const listed = storeProducts.map((p) => getProductLogFields(p));
-    console.error('[RNIAP] requestPurchase: sku not in App Store products', { sku, listed });
-    Alert.alert('상품 조회 실패', `App Store에서 상품을 찾을 수 없습니다.\n(${sku})`);
-    throw new Error(`Product not found on App Store: ${sku}`);
+    console.warn('[RNIAP] requestPurchase: sku not returned by fetchProducts (continuing)', {
+      sku,
+      listedCount: listed.length,
+    });
+  } else {
+    const { productId: validatedId, title, price } = getProductLogFields(matched);
+    console.log('[RNIAP] requestPurchase product validated', { productId: validatedId, title, price });
   }
-
-  const { productId: validatedId, title, price } = getProductLogFields(matched);
-  console.log('[RNIAP] requestPurchase product validated', { productId: validatedId, title, price });
 
   // Ensure we always finish manually only after DB grant succeeds.
   // react-native-iap v8+ (current: v15) expects an object payload.

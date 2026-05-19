@@ -73,6 +73,11 @@
   - Legacy anon/service_role 키 Disable JWT-based API keys로 비활성화
   - 앱 .env 및 admin/.env 새 publishable 키로 교체 완료
   - .env .gitignore에 추가 완료 (GitHub 노출 방지)
+- Supabase legacy anon key → publishable key(sb_publishable_...) 앱 교체 완료
+  - .env EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY publishable 키로 통일
+  - supabase.ts: 환경변수 우선(EXPO_PUBLIC_*), legacy eyJ... 하드코딩/fallback 없음
+  - eas.json production env에 EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY 추가
+  - 변경 파일: .env, eas.json, supabase.ts, app.config.ts
 - 관리자 웹 (admin/ 폴더):
   - React + Vite + TypeScript + Tailwind CSS + React Router v6
   - Supabase 연동
@@ -330,6 +335,12 @@
 - (2026-05-14) IAP DB 지급 성공(`grantAppleIapAndRecord` ok=true) 직후 상점 보유 매칭권/포인트 자동 갱신: `iap/rniap.ts`의 `subscribeIapGrantSuccess` 이벤트 + `app/store.tsx` 기존 `load({ silent: true })` 재사용, 갱신 실패는 `console.warn`만 (지급/finish 흐름 차단 없음)
 - (2026-05-14) IAP/상점 디버그 정리: `app/store.tsx`·`iap/rniap.ts`에서 IAP DEBUG Alert, BUYDBG emit/구독·Pending Reprocess/lastBuyStep 바·Reset SKU 등 화면 디버그 제거, `debugClearTransactionQueueIOS`는 큐 정리+재연결 유지·내부 성공/실패 Alert만 제거
 - (2026-05-18) IAP lifecycle 안정화: `onBuyMatchingTicket` 이벤트 기반 패턴으로 수정, `requestPurchase` 내부 connection 보장, Store 진입 시 `ensureIapReady` 선제 호출, `getProducts` SKU 검증 추가
+- IAP requestPurchase 사전 검증 완화 (getProducts false negative 대응)
+  - getProducts([sku]) 빈 배열이어도 throw/Alert 하지 않음, console.warn만
+  - rnRequestPurchase는 항상 호출
+  - app/store.tsx 구매 catch: 사용자 Alert "구매를 진행할 수 없습니다. 잠시 후 다시 시도해주세요."로 통일
+  - SKU/productId 원문 에러 메시지 사용자 노출 제거 (상품 조회 실패 Alert 제거)
+  - 변경 파일: iap/rniap.ts, app/store.tsx
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정
