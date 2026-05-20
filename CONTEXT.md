@@ -351,6 +351,8 @@
   - isUserCancelLikeError 헬퍼 추가, 취소 시 Alert 없이 return
   - 모든 에러 Alert 메시지 IAP_PURCHASE_USER_MESSAGE로 통일
   - 변경 파일: iap/rniap.ts
+- IAP requestPurchase에서 getProducts 빈 배열 시 하드 차단 제거 (빌드53 방식으로 복구)
+- getProducts 결과 console.warn으로 로깅 추가
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
   - tsconfig.json exclude에 admin, supabase/functions 분리
   - reward.tsx, chat-room.tsx, profile-edit, push.ts 등 타입 오류 수정

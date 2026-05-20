@@ -487,14 +487,22 @@ export async function requestPurchase(productId: string): Promise<void> {
   }
 
   const storeProducts = await getProducts([sku]);
-  const matched = storeProducts.find((p) => getProductIdFromProduct(p) === sku);
-  if (storeProducts.length === 0 || !matched) {
-    console.warn('[IAP] product validation empty', sku);
-    throw new Error(IAP_PURCHASE_USER_MESSAGE);
-  }
+  const storeProductIds = storeProducts.map((p) => getProductIdFromProduct(p)).filter(Boolean);
+  console.warn('[RNIAP] requestPurchase preflight', {
+    sku,
+    storeProductIds,
+  });
 
-  const { productId: validatedId, title, price } = getProductLogFields(matched);
-  console.log('[RNIAP] requestPurchase product validated', { productId: validatedId, title, price });
+  const matched = storeProducts.find((p) => getProductIdFromProduct(p) === sku);
+  if (!matched) {
+    console.warn('[RNIAP] requestPurchase: sku not returned by getProducts (continuing)', {
+      sku,
+      storeProductIdsCount: storeProductIds.length,
+    });
+  } else {
+    const { productId: validatedId, title, price } = getProductLogFields(matched);
+    console.log('[RNIAP] requestPurchase product validated', { productId: validatedId, title, price });
+  }
 
   // Ensure we always finish manually only after DB grant succeeds.
   // react-native-iap v8+ (current: v15) expects an object payload.
