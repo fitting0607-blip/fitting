@@ -1,5 +1,6 @@
 import { grantAttendanceIfNeededOnLogin } from '@/attendance-helpers';
 import { enqueueLoginAttendanceModal } from '@/login-attendance-pending';
+import { useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -8,8 +9,14 @@ import type { RegisterDraft } from './types';
 import { PrimaryButton } from './components';
 import { layoutStyles } from './ui';
 
+const MIN_AGE = 18;
+
 function isValidAge(age: number) {
   return Number.isFinite(age) && age >= 1 && age <= 120;
+}
+
+function isEligibleAge(age: number) {
+  return isValidAge(age) && age >= MIN_AGE;
 }
 
 function isUserAlreadyRegisteredError(message?: string) {
@@ -41,11 +48,20 @@ export function AgeStep({
 }) {
   const age = draft.age ?? '';
   const normalizedPhone = (draft.phone ?? '').trim();
+  const lastUnderageAlertRef = useRef<number | null>(null);
 
   const submit = async () => {
+    if (draft.age == null || String(draft.age).trim() === '') {
+      Alert.alert('안내', '핏팅은 만 18세 이상만 이용 가능합니다.');
+      return;
+    }
     const ageNum = Number(age);
     if (!isValidAge(ageNum)) {
       Alert.alert('오류', '올바른 나이를 입력해주세요.');
+      return;
+    }
+    if (!isEligibleAge(ageNum)) {
+      Alert.alert('안내', '핏팅은 만 18세 이상만 이용 가능합니다.');
       return;
     }
 
@@ -186,12 +202,32 @@ export function AgeStep({
       <TextInput
         style={styles.input}
         value={String(age)}
-        onChangeText={(v) => setDraft((p) => ({ ...p, age: Number(v) }))}
+        onChangeText={(v) => {
+          const digits = String(v ?? '').replace(/[^\d]/g, '');
+          if (!digits) {
+            lastUnderageAlertRef.current = null;
+            setDraft((p) => ({ ...p, age: null }));
+            return;
+          }
+          const nextAge = Number(digits);
+          setDraft((p) => ({ ...p, age: nextAge }));
+
+          // 입력 중(특히 '18'을 타이핑하는 과정) 과도한 Alert를 줄이기 위해
+          // 2자리 이상일 때만 underage 안내를 띄운다.
+          if (digits.length >= 2 && isValidAge(nextAge) && nextAge < MIN_AGE) {
+            if (lastUnderageAlertRef.current !== nextAge) {
+              lastUnderageAlertRef.current = nextAge;
+              Alert.alert('안내', '핏팅은 만 18세 이상만 이용 가능합니다.');
+            }
+          } else if (nextAge >= MIN_AGE) {
+            lastUnderageAlertRef.current = null;
+          }
+        }}
         keyboardType="number-pad"
         placeholder="나이 입력"
         maxLength={3}
       />
-      <PrimaryButton label="완료" disabled={!isValidAge(Number(age))} onPress={submit} />
+      <PrimaryButton label="완료" disabled={!isEligibleAge(Number(age))} onPress={submit} />
     </View>
   );
 }
