@@ -393,12 +393,13 @@
 - 소모임 기능 추가 (gatherings, gathering_applications 테이블)
 - 리워드탭 소모임 섹션 추가 (신청하기 버튼 → gathering.tsx 이동)
 - app/gathering.tsx 소모임 상세/신청 화면
-- app/store.tsx 소모임 탭 추가 (승인된 유저만 결제 가능)
-- 관리자 소모임 관리 페이지 (Gatherings.tsx)
-- 관리자 소모임 신청 관리 (승인/거절/결제완료 탭)
+- app/store.tsx 소모임 탭 추가 (승인된 유저만 결제, 결제 완료 시 상세주소/인원 표시)
+- 관리자 소모임 관리 페이지 (Gatherings.tsx) - 생성/수정/삭제
+- 관리자 소모임 신청 관리 (피티유저와 동일 스타일, 승인/거절/결제완료 탭)
 - AdMob, react-native-iap Expo Go 호환 처리 (동적 import)
 - purchaseErrorListener return 누락 버그 수정
 - Supabase publishable key 적용, eas.json env 추가
+- 소모임 승인 시 푸시알림 실패해도 승인 완료되도록 수정
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류

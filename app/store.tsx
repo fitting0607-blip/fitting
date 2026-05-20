@@ -36,6 +36,24 @@ function purchaseAlertMessage(e: unknown): string {
 /** requestPurchase 프로미스가 해결되지 않을 때 purchasingSku 고착 방지 (이벤트 기반 IAP) */
 const PURCHASE_SKU_STUCK_TIMEOUT_MS = 120_000;
 
+function genderBucket(g: string | null | undefined): 'male' | 'female' | null {
+  const s = String(g ?? '').trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'male' || s === 'm' || s.includes('남')) return 'male';
+  if (s === 'female' || s === 'f' || s.includes('여')) return 'female';
+  return null;
+}
+
+function formatDisplayDate(value: string | null | undefined): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '-';
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  return raw;
+}
+
 type StoreItem = {
   id: string;
   category: 'ticket' | 'matching_ticket' | 'pt_ticket';
@@ -52,7 +70,18 @@ type MyGatheringApplication = {
   id: string;
   status: string | null;
   gathering_id: string | null;
-  gatherings?: { title: string | null; date: string | null; price: number | null } | null;
+};
+
+type GatheringDetail = {
+  id: string;
+  title: string | null;
+  date: string | null;
+  time: string | null;
+  location: string | null;
+  address: string | null;
+  max_male: number | null;
+  max_female: number | null;
+  price: number | null;
 };
 
 export default function StoreScreen() {
@@ -69,6 +98,9 @@ export default function StoreScreen() {
   const [myPtLoading, setMyPtLoading] = useState(true);
   const [myGathering, setMyGathering] = useState<MyGatheringApplication | null>(null);
   const [myGatheringLoading, setMyGatheringLoading] = useState(true);
+  const [myGatheringDetail, setMyGatheringDetail] = useState<GatheringDetail | null>(null);
+  const [myGatheringMaleCount, setMyGatheringMaleCount] = useState(0);
+  const [myGatheringFemaleCount, setMyGatheringFemaleCount] = useState(0);
 
   const purchasingWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearPurchasingWatchdog = useCallback(() => {
@@ -285,12 +317,15 @@ export default function StoreScreen() {
       if (authError) throw authError;
       if (!user?.id) {
         setMyGathering(null);
+        setMyGatheringDetail(null);
+        setMyGatheringMaleCount(0);
+        setMyGatheringFemaleCount(0);
         return;
       }
 
       const { data, error } = await supabase
         .from('gathering_applications')
-        .select('id,status,gathering_id,gatherings(title,date,price),created_at')
+        .select('id,status,gathering_id,created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -298,11 +333,68 @@ export default function StoreScreen() {
       if (error) throw error;
       if (!data) {
         setMyGathering(null);
+        setMyGatheringDetail(null);
+        setMyGatheringMaleCount(0);
+        setMyGatheringFemaleCount(0);
         return;
       }
       setMyGathering(data as unknown as MyGatheringApplication);
+
+      const gatheringId = String((data as any)?.gathering_id ?? '').trim();
+      if (!gatheringId) {
+        setMyGatheringDetail(null);
+        setMyGatheringMaleCount(0);
+        setMyGatheringFemaleCount(0);
+        return;
+      }
+
+      const [{ data: g, error: gErr }, { data: apps, error: appsErr }] = await Promise.all([
+        supabase
+          .from('gatherings')
+          .select('id,title,date,time,location,address,max_male,max_female,price')
+          .eq('id', gatheringId)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('gathering_applications')
+          .select('gender,status')
+          .eq('gathering_id', gatheringId)
+          .not('status', 'eq', 'rejected'),
+      ]);
+      if (gErr) throw gErr;
+      if (appsErr) throw appsErr;
+
+      const gr = g as any;
+      setMyGatheringDetail(
+        gr?.id
+          ? {
+              id: String(gr.id),
+              title: gr.title ?? null,
+              date: gr.date ?? null,
+              time: gr.time ?? null,
+              location: gr.location ?? null,
+              address: gr.address ?? null,
+              max_male: typeof gr.max_male === 'number' ? gr.max_male : null,
+              max_female: typeof gr.max_female === 'number' ? gr.max_female : null,
+              price: typeof gr.price === 'number' ? gr.price : null,
+            }
+          : null
+      );
+
+      let m = 0;
+      let f = 0;
+      for (const r of apps ?? []) {
+        const b = genderBucket((r as any)?.gender);
+        if (b === 'male') m += 1;
+        else if (b === 'female') f += 1;
+      }
+      setMyGatheringMaleCount(m);
+      setMyGatheringFemaleCount(f);
     } catch {
       setMyGathering(null);
+      setMyGatheringDetail(null);
+      setMyGatheringMaleCount(0);
+      setMyGatheringFemaleCount(0);
     } finally {
       setMyGatheringLoading(false);
     }
@@ -576,43 +668,95 @@ export default function StoreScreen() {
               <Text style={styles.productsEmptyText}>신청 내역이 없습니다.</Text>
             </View>
           ) : (
-            <View style={styles.noticeCard}>
-              <Text style={styles.noticeTitle}>{myGathering.gatherings?.title ?? '소모임'}</Text>
-              <Text style={styles.noticeSub}>
-                {String(myGathering.gatherings?.date ?? '').trim()
-                  ? `날짜: ${String(myGathering.gatherings?.date ?? '').trim()}`
-                  : '날짜: -'}
-              </Text>
-              <Text style={styles.noticeSub}>
-                {typeof myGathering.gatherings?.price === 'number'
-                  ? `가격: ₩${formatKRW(myGathering.gatherings.price)}`
-                  : '가격: -'}
-              </Text>
-
+            <>
               {String(myGathering.status ?? '') === 'pending' ? (
-                <Text style={styles.noticeText}>승인 대기 중</Text>
-              ) : String(myGathering.status ?? '') === 'paid' ? (
-                <Text style={styles.noticeText}>결제 완료</Text>
-              ) : String(myGathering.status ?? '') === 'approved' ? (
-                <Pressable
-                  onPress={onPayGathering}
-                  disabled={!!purchasingSku}
-                  style={({ pressed }) => [
-                    styles.buyBtn,
-                    !!purchasingSku && styles.buyBtnDisabled,
-                    pressed && !purchasingSku && styles.rowPressed,
-                  ]}
-                >
-                  {purchasingSku ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.buyBtnText}>결제하기</Text>
-                  )}
-                </Pressable>
-              ) : (
-                <Text style={styles.noticeText}>상태: {String(myGathering.status ?? 'pending')}</Text>
-              )}
-            </View>
+                <View style={styles.noticeCard}>
+                  <Text style={styles.noticeText}>승인 대기 중입니다. 승인 후 결제할 수 있어요.</Text>
+                </View>
+              ) : null}
+
+              {String(myGathering.status ?? '') === 'approved' ? (
+                <View style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <View style={styles.iconWrap}>
+                      <Feather name="users" size={20} color={MAIN} />
+                    </View>
+                    <View style={styles.rowBody}>
+                      <Text style={styles.rowTitle}>{myGatheringDetail?.title ?? '소모임'}</Text>
+                      <View style={styles.metaLine}>
+                        <Text style={styles.priceText}>
+                          {typeof myGatheringDetail?.price === 'number'
+                            ? `₩${formatKRW(myGatheringDetail.price)}`
+                            : '가격: -'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                  <Pressable
+                    onPress={onPayGathering}
+                    disabled={!!purchasingSku}
+                    style={({ pressed }) => [
+                      styles.buyBtn,
+                      !!purchasingSku && styles.buyBtnDisabled,
+                      pressed && !purchasingSku && styles.rowPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="소모임 결제하기"
+                  >
+                    {purchasingSku ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.buyBtnText}>구매</Text>
+                    )}
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {String(myGathering.status ?? '') === 'paid' ? (
+                <View style={styles.paidCard}>
+                  <View style={styles.paidHeaderLine}>
+                    <Text style={styles.paidTitle}>{myGatheringDetail?.title ?? '소모임'}</Text>
+                    <View style={styles.paidBadge} accessibilityLabel="결제 완료">
+                      <Text style={styles.paidBadgeText}>결제 완료</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.paidRows}>
+                    <View style={styles.paidRow}>
+                      <Text style={styles.paidLabel}>날짜</Text>
+                      <Text style={styles.paidValue}>{formatDisplayDate(myGatheringDetail?.date)}</Text>
+                    </View>
+                    <View style={styles.paidRow}>
+                      <Text style={styles.paidLabel}>시간</Text>
+                      <Text style={styles.paidValue}>{String(myGatheringDetail?.time ?? '').trim() || '-'}</Text>
+                    </View>
+                    <View style={styles.paidRow}>
+                      <Text style={styles.paidLabel}>장소</Text>
+                      <Text style={styles.paidValue}>{String(myGatheringDetail?.location ?? '').trim() || '-'}</Text>
+                    </View>
+                    <View style={styles.paidRow}>
+                      <Text style={styles.paidLabel}>상세주소</Text>
+                      <Text style={styles.paidValue}>{String(myGatheringDetail?.address ?? '').trim() || '-'}</Text>
+                    </View>
+                    <View style={[styles.paidRow, styles.paidRowLast]}>
+                      <Text style={styles.paidLabel}>현재 신청 인원</Text>
+                      <Text style={styles.paidValue}>
+                        남자 {myGatheringMaleCount}명 / 여자 {myGatheringFemaleCount}명
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+
+              {String(myGathering.status ?? '') &&
+              String(myGathering.status ?? '') !== 'pending' &&
+              String(myGathering.status ?? '') !== 'approved' &&
+              String(myGathering.status ?? '') !== 'paid' ? (
+                <View style={styles.noticeCard}>
+                  <Text style={styles.noticeText}>상태: {String(myGathering.status ?? 'pending')}</Text>
+                </View>
+              ) : null}
+            </>
           )
         ) : null}
 
@@ -965,5 +1109,66 @@ const styles = StyleSheet.create({
   productsEmptyText: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  paidCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#EEF0F4',
+  },
+  paidHeaderLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 12,
+  },
+  paidTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111111',
+  },
+  paidBadge: {
+    backgroundColor: MAIN,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  paidBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  paidRows: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EEF0F4',
+    overflow: 'hidden',
+  },
+  paidRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  paidRowLast: {
+    borderBottomWidth: 0,
+  },
+  paidLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    marginBottom: 6,
+  },
+  paidValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111111',
+    lineHeight: 20,
   },
 });

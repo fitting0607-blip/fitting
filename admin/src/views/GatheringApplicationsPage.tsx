@@ -120,7 +120,11 @@ export function GatheringApplicationsPage() {
         .update({ status: 'approved' })
         .eq('id', row.id)
       if (error) throw error
-      await sendGatheringApprovedPush({ recipientUserId: userId, gatheringId })
+      try {
+        await sendGatheringApprovedPush({ recipientUserId: userId, gatheringId })
+      } catch (pushErr) {
+        console.error('[GatheringApplications] sendGatheringApprovedPush failed', pushErr)
+      }
       setRows((cur) => cur.map((r) => (r.id === row.id ? { ...r, status: 'approved' } : r)))
     } catch (e: any) {
       alert(e?.message ?? '승인 실패')
