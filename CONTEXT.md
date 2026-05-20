@@ -376,7 +376,16 @@
 - 푸시 초기화 크래시 방지 (ensureExpoNotificationHandlerInstalled, registerAndSavePushToken, attachNotificationResponseHandler 전체 try/catch 처리)
 - 신고 기능 (신고 사유 6가지, reports 테이블)
 - 신고 화면 키보드 내려가기 수정 (빈 화면 터치 시 Keyboard.dismiss)
+- (2026-05-20) 홈 피드 게시물 카드 우측 하단 신고 버튼 추가
+  - 사진 영역 우측 하단 flag 아이콘, 탭 시 `/report` (targetId, postId 전달)
+  - 본인 게시물에는 신고 버튼 미표시
+  - 변경 파일: app/(tabs)/index.tsx
 - 차단 기능 (차단/해제, 차단목록, 홈 피드 필터링)
+- (2026-05-20) 차단 유저 게시물 즉시 피드에서 제거
+  - 조회 시 blocks 테이블에서 blocker_id=현재 유저인 blocked_id 목록으로 user_id 필터 (기존 유지)
+  - 프로필에서 차단 성공 시 feed-refresh-pending.ts로 대상 유저 ID 기록
+  - 홈 탭 포커스 시 useFocusEffect로 목록에서 즉시 제거 후 loadFeedPosts 새로고침
+  - 변경 파일: feed-refresh-pending.ts, app/(tabs)/index.tsx, app/user-profile.tsx
 - 채팅 읽음 처리 (채팅방 진입 시 읽음, 목록 뱃지 사라짐)
 - 지도 탭 (구글맵, 내 위치, 지역 검색, 트레이너 목록 바텀시트)
   - (2026-04-23) 지도 탭 검색 기능 수정 (Google Places API 키 fallback 처리)

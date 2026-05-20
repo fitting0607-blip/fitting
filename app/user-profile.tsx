@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Dimensions, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { markHomeFeedRefresh } from '@/feed-refresh-pending';
 import { supabase } from '../supabase';
 import { useMatchModal } from './hooks/useMatchModal';
 import { usePostLike } from './hooks/usePostLike';
@@ -206,6 +207,7 @@ export default function UserProfileScreen() {
                   });
                   if (error) throw error;
                   setIsBlocked(true);
+                  markHomeFeedRefresh(userId);
                   Alert.alert('차단 완료', '차단했어요.');
                 } else {
                   const { error } = await supabase

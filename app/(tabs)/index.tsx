@@ -1,5 +1,5 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -18,6 +18,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
+import { consumeHomeFeedBlockedUserId } from '@/feed-refresh-pending';
 import {
   clearLoginAttendanceModalPoints,
   peekLoginAttendanceModalPoints,
@@ -75,6 +76,7 @@ export default function HomeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const [selectedTab, setSelectedTab] = useState<FeedTab>('일반');
   const [posts, setPosts] = useState<PostFeedRow[]>([]);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [feedBarHeight, setFeedBarHeight] = useState(0);
@@ -265,6 +267,7 @@ export default function HomeScreen() {
       if (authError) throw authError;
 
       const myId = user?.id ?? null;
+      setMyUserId(myId);
       let myGender: string | null = null;
       let matchedUserIds: string[] = [];
       let blockedIds: string[] = [];
@@ -426,9 +429,15 @@ export default function HomeScreen() {
     }
   }, [loadMyLikesForPostIds, resolveImageUrls, selectedTab]);
 
-  useEffect(() => {
-    void loadFeedPosts();
-  }, [loadFeedPosts]);
+  useFocusEffect(
+    useCallback(() => {
+      const blockedUserId = consumeHomeFeedBlockedUserId();
+      if (blockedUserId) {
+        setPosts((prev) => prev.filter((p) => String(p.user_id ?? '') !== blockedUserId));
+      }
+      void loadFeedPosts();
+    }, [loadFeedPosts])
+  );
 
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -531,6 +540,23 @@ export default function HomeScreen() {
                 >
                   <Feather name="heart" size={24} color={likedIds[id] ? '#FF3B30' : '#BDBDBD'} />
                 </Pressable>
+
+                {myUserId && String(item.user_id ?? '') !== myUserId ? (
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: '/report',
+                        params: { targetId: String(item.user_id ?? ''), postId: id },
+                      })
+                    }
+                    hitSlop={10}
+                    style={[styles.reportBtn, { right: overlayPadHRight }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="신고"
+                  >
+                    <Feather name="flag" size={20} color="#FFFFFF" />
+                  </Pressable>
+                ) : null}
               </View>
 
               {/* 게시물 글 */}
@@ -611,8 +637,10 @@ export default function HomeScreen() {
       photoHeight,
       toggleExpanded,
       handleToggleLike,
+      myUserId,
       openMatchModal,
       openUserProfileWithPoints,
+      router,
     ]
   );
 
@@ -938,6 +966,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 6,
+  },
+  reportBtn: {
+    position: 'absolute',
+    bottom: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
   },
 
   cardContent: {
