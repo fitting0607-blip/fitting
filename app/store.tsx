@@ -110,10 +110,25 @@ export default function StoreScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    return subscribePurchaseUiIdle(({ productId }) => {
+  const startPurchasingWatchdog = useCallback(
+    (sku: string) => {
       clearPurchasingWatchdog();
-      setPurchasingSku((cur) => (cur === productId ? null : cur));
+      purchasingWatchdogRef.current = setTimeout(() => {
+        clearPurchasingWatchdog();
+        setPurchasingSku(null);
+        Alert.alert(
+          '구매 확인 중',
+          '결제 처리가 지연되고 있습니다. 잠시 후 상점 화면을 다시 확인해주세요.'
+        );
+      }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
+    },
+    [clearPurchasingWatchdog]
+  );
+
+  useEffect(() => {
+    return subscribePurchaseUiIdle(() => {
+      clearPurchasingWatchdog();
+      setPurchasingSku(null);
     });
   }, [clearPurchasingWatchdog]);
 
@@ -155,9 +170,11 @@ export default function StoreScreen() {
 
   useEffect(() => {
     return subscribeIapGrantSuccess(() => {
+      clearPurchasingWatchdog();
+      setPurchasingSku(null);
       void load({ silent: true });
     });
-  }, [load]);
+  }, [load, clearPurchasingWatchdog]);
 
   const loadProducts = useCallback(async (category: 'ticket' | 'matching_ticket' | 'pt_ticket') => {
     setProductsLoading(true);
@@ -452,9 +469,7 @@ export default function StoreScreen() {
       }
       clearPurchasingWatchdog();
       setPurchasingSku(sku);
-      purchasingWatchdogRef.current = setTimeout(() => {
-        setPurchasingSku((cur) => (cur === sku ? null : cur));
-      }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
+      startPurchasingWatchdog(sku);
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
@@ -479,7 +494,7 @@ export default function StoreScreen() {
         Alert.alert('구매 실패', purchaseAlertMessage(e));
       }
     },
-    [tab, purchasingSku, clearPurchasingWatchdog]
+    [tab, purchasingSku, clearPurchasingWatchdog, startPurchasingWatchdog]
   );
 
   const onBuyPtTicket = useCallback(
@@ -501,9 +516,7 @@ export default function StoreScreen() {
       if (purchasingSku) return;
       clearPurchasingWatchdog();
       setPurchasingSku(sku);
-      purchasingWatchdogRef.current = setTimeout(() => {
-        setPurchasingSku((cur) => (cur === sku ? null : cur));
-      }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
+      startPurchasingWatchdog(sku);
       try {
         if (sku === 'com.hywoo.fitting.ticket_unlimited') {
           Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
@@ -528,7 +541,7 @@ export default function StoreScreen() {
         Alert.alert('구매 실패', purchaseAlertMessage(e));
       }
     },
-    [tab, myPtEligible, purchasingSku, clearPurchasingWatchdog]
+    [tab, myPtEligible, purchasingSku, clearPurchasingWatchdog, startPurchasingWatchdog]
   );
 
   const onPayGathering = useCallback(async () => {
@@ -548,9 +561,7 @@ export default function StoreScreen() {
     setPendingGatheringApplicationId(myGathering.id);
     clearPurchasingWatchdog();
     setPurchasingSku(sku);
-    purchasingWatchdogRef.current = setTimeout(() => {
-      setPurchasingSku((cur) => (cur === sku ? null : cur));
-    }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
+    startPurchasingWatchdog(sku);
     try {
       console.log('[STORE] gathering requestPurchase start', {
         sku,
@@ -572,7 +583,7 @@ export default function StoreScreen() {
       setPurchasingSku(null);
       Alert.alert('구매 실패', purchaseAlertMessage(e));
     }
-  }, [myGathering, purchasingSku, clearPurchasingWatchdog]);
+  }, [myGathering, purchasingSku, clearPurchasingWatchdog, startPurchasingWatchdog]);
 
   const formatKRW = useCallback((value: number) => {
     const safe = Number.isFinite(value) ? value : 0;

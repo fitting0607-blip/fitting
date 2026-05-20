@@ -62,6 +62,37 @@ const inflightTransactionIds = new Set<string>();
 /** Gathering fee purchase needs application context to mark paid. */
 let pendingGatheringApplicationId: string | null = null;
 
+/** purchaseErrorListener에 productId가 없을 때 store purchasingSku 해제용 */
+let lastRequestPurchaseSku: string | null = null;
+
+/** requestPurchase ~ purchaseUpdated/error 처리 완료까지 로그인 리다이렉트 차단용 */
+let iapPurchaseFlowActive = false;
+
+type IapPurchaseFlowListener = () => void;
+const iapPurchaseFlowListeners = new Set<IapPurchaseFlowListener>();
+
+function notifyIapPurchaseFlowChange(): void {
+  iapPurchaseFlowListeners.forEach((cb) => {
+    try {
+      cb();
+    } catch {
+      // ignore subscriber errors
+    }
+  });
+}
+
+/** IAP 결제/지급 처리 중 — RootLayout에서 로그인 replace 방지 */
+export function isIapPurchaseFlowActive(): boolean {
+  return iapPurchaseFlowActive || inflightTransactionIds.size > 0;
+}
+
+export function subscribeIapPurchaseFlowChange(cb: IapPurchaseFlowListener): () => void {
+  iapPurchaseFlowListeners.add(cb);
+  return () => {
+    iapPurchaseFlowListeners.delete(cb);
+  };
+}
+
 export function setPendingGatheringApplicationId(id: string | null): void {
   const trimmed = String(id ?? '').trim();
   pendingGatheringApplicationId = trimmed || null;
@@ -71,16 +102,29 @@ export function setPendingGatheringApplicationId(id: string | null): void {
 type PurchaseUiIdleListener = (info: { productId: string }) => void;
 const purchaseUiIdleListeners = new Set<PurchaseUiIdleListener>();
 
-function emitPurchaseUiIdle(productId: string): void {
-  const pid = String(productId ?? '').trim();
-  if (!pid) return;
-  purchaseUiIdleListeners.forEach((cb) => {
-    try {
-      cb({ productId: pid });
-    } catch {
-      // ignore subscriber errors
-    }
-  });
+function emitPurchaseUiIdle(productId?: string | null): void {
+  const pid = String(productId ?? lastRequestPurchaseSku ?? '').trim();
+  if (pid) {
+    purchaseUiIdleListeners.forEach((cb) => {
+      try {
+        cb({ productId: pid });
+      } catch {
+        // ignore subscriber errors
+      }
+    });
+  }
+  iapPurchaseFlowActive = false;
+  lastRequestPurchaseSku = null;
+  notifyIapPurchaseFlowChange();
+}
+
+function emitPurchaseUiIdleFromError(error: unknown): void {
+  const skuFromErr = String(
+    (error as { productId?: string; sku?: string })?.productId ??
+      (error as { productId?: string; sku?: string })?.sku ??
+      ''
+  ).trim();
+  emitPurchaseUiIdle(skuFromErr || lastRequestPurchaseSku);
 }
 
 export function subscribePurchaseUiIdle(cb: PurchaseUiIdleListener): () => void {
@@ -172,6 +216,7 @@ async function processPurchaseLikeListener(purchase: IapPurchase, source: string
       source,
       authErrorMessage: String((authError as any)?.message ?? ''),
     });
+    emitPurchaseUiIdle(productId);
     return { status: 'no_session', transactionId, productId };
   }
 
@@ -207,6 +252,7 @@ async function processPurchaseLikeListener(purchase: IapPurchase, source: string
       }
 
       processedTransactionIds.add(transactionId);
+      emitPurchaseUiIdle(productId);
       return { status: 'duplicate_finished', transactionId, productId };
     }
 
@@ -215,6 +261,7 @@ async function processPurchaseLikeListener(purchase: IapPurchase, source: string
     const message = String(grantRes.message ?? '결제 처리 중 오류가 발생했습니다.');
     console.error('[RNIAP] grant failed (NOT finishing)', { ...grantRes, source });
     Alert.alert('결제 처리 실패', `source=${source}\nkind=${kind}\n${message}`);
+    emitPurchaseUiIdle(productId);
     return { status: 'grant_failed', transactionId, productId, message, kind };
   }
 
@@ -237,6 +284,7 @@ async function processPurchaseLikeListener(purchase: IapPurchase, source: string
     Alert.alert('결제 완료', doneMsg);
   }
 
+  emitPurchaseUiIdle(productId);
   return { status: 'finished', transactionId, productId };
 }
 
@@ -504,6 +552,10 @@ export async function requestPurchase(productId: string): Promise<void> {
     console.log('[RNIAP] requestPurchase product validated', { productId: validatedId, title, price });
   }
 
+  lastRequestPurchaseSku = sku;
+  iapPurchaseFlowActive = true;
+  notifyIapPurchaseFlowChange();
+
   // Ensure we always finish manually only after DB grant succeeds.
   // react-native-iap v8+ (current: v15) expects an object payload.
   const payload = {
@@ -518,6 +570,9 @@ export async function requestPurchase(productId: string): Promise<void> {
   try {
     await iap.requestPurchase(payload as any);
   } catch (e: any) {
+    iapPurchaseFlowActive = false;
+    lastRequestPurchaseSku = null;
+    notifyIapPurchaseFlowChange();
     console.error('[IAP] requestPurchase throw', e);
     await invalidateBillingConnection('requestPurchase failed');
     throw e;
@@ -606,13 +661,12 @@ export function startListeners(): void {
       purchaseErrorSub = iap.purchaseErrorListener((error: unknown) => {
         const code = String((error as any)?.code ?? '').trim();
         const message = String((error as any)?.message ?? '');
-        const skuFromErr = String((error as any)?.productId ?? (error as any)?.sku ?? '').trim();
 
         console.error('[IAP] purchaseErrorListener', error);
 
         const lowerMsg = message.toLowerCase();
         if (lowerMsg.includes('billing is not prepared')) {
-          if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+          emitPurchaseUiIdleFromError(error);
           Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
           return;
         }
@@ -625,25 +679,22 @@ export function startListeners(): void {
             code,
             message,
           });
-          if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+          emitPurchaseUiIdleFromError(error);
           return;
         }
 
         if (isAuthSessionMissingError({ code, message })) {
           console.log('[RNIAP] skip purchase error without auth session', { code, message });
-          if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+          emitPurchaseUiIdleFromError(error);
           return;
         }
 
         if (isUserCancelLikeError({ code, message })) {
-          if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+          emitPurchaseUiIdleFromError(error);
           return;
         }
 
-        if (skuFromErr) {
-          emitPurchaseUiIdle(skuFromErr);
-        }
-
+        emitPurchaseUiIdleFromError(error);
         Alert.alert('결제 오류', IAP_PURCHASE_USER_MESSAGE);
       });
     } catch (e) {

@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Redirect, Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import Constants, { AppOwnership } from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -14,6 +14,8 @@ import {
   startListeners as startRniapListeners,
   stopListeners as stopRniapListeners,
   endConnection as endRniapConnection,
+  isIapPurchaseFlowActive,
+  subscribeIapPurchaseFlowChange,
 } from '@/iap/rniap';
 import { supabase } from '../supabase';
 
@@ -27,6 +29,7 @@ export default function RootLayout() {
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [iapFlowRevision, setIapFlowRevision] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -92,6 +95,25 @@ export default function RootLayout() {
   }, [hasSession]);
 
   useEffect(() => {
+    return subscribeIapPurchaseFlowChange(() => {
+      setIapFlowRevision((n) => n + 1);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    if (hasSession) return;
+    if (isIapPurchaseFlowActive()) return;
+
+    const first = segments[0];
+    const onAuthScreen =
+      first === '(auth)' || first === 'login' || first === 'register';
+    if (onAuthScreen) return;
+
+    router.replace('/login');
+  }, [isReady, hasSession, segments, router, iapFlowRevision]);
+
+  useEffect(() => {
     // handle notification taps
     const detach = attachNotificationResponseHandler((route) => {
       try {
@@ -103,12 +125,7 @@ export default function RootLayout() {
     return detach;
   }, [router]);
 
-  const inAuthGroup = segments[0] === '(auth)';
-
   if (!isReady) return null;
-  if (!hasSession && !inAuthGroup) {
-    return <Redirect href="/(auth)/login" />;
-  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

@@ -74,7 +74,7 @@ export default function SettingsScreen() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      router.replace('/(auth)/login' as any);
+      router.replace('/login');
     } catch (e) {
       Alert.alert('로그아웃 실패', e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');
     } finally {
@@ -106,7 +106,7 @@ export default function SettingsScreen() {
               const { error: signOutErr } = await supabase.auth.signOut();
               if (signOutErr) throw signOutErr;
 
-              router.replace('/(auth)/login' as any);
+              router.replace('/login');
               Alert.alert('완료', '탈퇴가 완료되었습니다');
             } catch (e) {
               Alert.alert('탈퇴 실패', e instanceof Error ? e.message : '알 수 없는 오류가 발생했습니다.');

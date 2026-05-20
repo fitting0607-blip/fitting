@@ -351,6 +351,11 @@
   - isUserCancelLikeError 헬퍼 추가, 취소 시 Alert 없이 return
   - 모든 에러 Alert 메시지 IAP_PURCHASE_USER_MESSAGE로 통일
   - 변경 파일: iap/rniap.ts
+- (2026-05-20) IAP 결제 후 (auth) route REPLACE 에러 수정 및 purchasingSku/리다이렉트 보강
+  - IAP 결제 후 `(auth)` route REPLACE 에러 수정: `app/_layout.tsx` `<Redirect href="/(auth)/login" />` 제거, `router.replace('/login')`으로 변경 (`app/settings.tsx` 로그아웃/탈퇴 동일)
+  - IAP 플로우 중 로그인 리다이렉트 차단: `iap/rniap.ts` `isIapPurchaseFlowActive()` / `subscribeIapPurchaseFlowChange()` 추가, `requestPurchase`~idle 처리 완료까지 RootLayout 로그인 replace 보류
+  - purchasingSku 해제 로직 전체 보강: `subscribeIapGrantSuccess`·`subscribePurchaseUiIdle`에서 `clearPurchasingWatchdog()` + `setPurchasingSku(null)`, 120초 워치독(지연 시 Alert), `purchaseErrorListener`/`processPurchaseLikeListener` 모든 종료 경로에서 `emitPurchaseUiIdle`, `requestPurchase` 정상 반환 시 finally 즉시 해제 금지 유지
+  - 변경 파일: app/_layout.tsx, app/store.tsx, app/settings.tsx, iap/rniap.ts
 - IAP requestPurchase에서 getProducts 빈 배열 시 하드 차단 제거 (빌드53 방식으로 복구)
 - getProducts 결과 console.warn으로 로깅 추가
 - 앱스토어 제출 전 TypeScript tsc --noEmit 오류 전체 정리 완료
