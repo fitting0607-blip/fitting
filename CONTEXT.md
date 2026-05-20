@@ -390,6 +390,16 @@
     - 피티 매칭하기 버튼: 매칭권 사용 팝업 연결 (useMatchModal 재사용), 매칭 성공 시 채팅방 이동
     - 프로필 보기 버튼 추가: 10포인트 차감 확인 팝업 → /user-profile 이동
 
+- 소모임 기능 추가 (gatherings, gathering_applications 테이블)
+- 리워드탭 소모임 섹션 추가 (신청하기 버튼 → gathering.tsx 이동)
+- app/gathering.tsx 소모임 상세/신청 화면
+- app/store.tsx 소모임 탭 추가 (승인된 유저만 결제 가능)
+- 관리자 소모임 관리 페이지 (Gatherings.tsx)
+- 관리자 소모임 신청 관리 (승인/거절/결제완료 탭)
+- AdMob, react-native-iap Expo Go 호환 처리 (동적 import)
+- purchaseErrorListener return 누락 버그 수정
+- Supabase publishable key 적용, eas.json env 추가
+
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
 - 홈 피드 카드 오른쪽 이미지 살짝 잘림 (추후 수정 필요)

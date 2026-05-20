@@ -1,11 +1,11 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Redirect, Stack, useRouter, useSegments } from 'expo-router';
+import Constants, { AppOwnership } from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
-import MobileAds from 'react-native-google-mobile-ads';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { attachNotificationResponseHandler, ensureExpoNotificationHandlerInstalled, registerAndSavePushToken } from '@/app/utils/push';
@@ -31,13 +31,15 @@ export default function RootLayout() {
   useEffect(() => {
     let mounted = true;
 
-    // Ensure Google Mobile Ads SDK is initialized on app start.
-    // This prevents startup crash: GADApplicationVerifyPublisherInitializedCorrectly
-    MobileAds()
-      .initialize()
-      .catch(() => null);
+    // Ensure Google Mobile Ads SDK is initialized on app start (skip Expo Go — no native module).
+    if (Constants.appOwnership !== AppOwnership.Expo) {
+      void import('react-native-google-mobile-ads')
+        .then(({ default: MobileAds }) => MobileAds().initialize().catch(() => null))
+        .catch(() => null);
+    }
 
-    if (Platform.OS === 'ios') {
+    // Expo Go: react-native-iap / NitroModules 없음 — rniap은 로드만 되어도 네이티브 접근 없음, 여기선 초기화 생략
+    if (Platform.OS === 'ios' && Constants.appOwnership !== AppOwnership.Expo) {
       void (async () => {
         try {
           await initRniapConnection();
@@ -119,6 +121,7 @@ export default function RootLayout() {
         <Stack.Screen name="user-profile" options={{ headerShown: false }} />
         <Stack.Screen name="chat-room" options={{ headerShown: false }} />
         <Stack.Screen name="store" options={{ headerShown: false }} />
+        <Stack.Screen name="gathering" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="report" options={{ headerShown: false }} />
         <Stack.Screen name="block-list" options={{ headerShown: false }} />

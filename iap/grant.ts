@@ -3,7 +3,7 @@ import { isKnownAppleProductId, TICKET_QTY_BY_PRODUCT_ID } from '@/iap/productId
 
 export type StoreItemRow = {
   id: string;
-  category: 'ticket' | 'matching_ticket' | 'pt_ticket';
+  category: 'ticket' | 'matching_ticket' | 'pt_ticket' | 'gathering';
   apple_product_id: string;
   title: string;
   ticket_count: number;
@@ -17,10 +17,11 @@ export type GrantPurchaseInput = {
   transactionId: string | null;
   // Optional contextual info for better fallbacks.
   productRow?: StoreItemRow | null;
+  context?: { gatheringApplicationId?: string | null };
 };
 
 export type GrantPurchaseResult =
-  | { ok: true; kind: 'matching_ticket' | 'pt_ticket' | 'premium_skipped'; grantedTickets?: number; grantedPoints?: number }
+  | { ok: true; kind: 'matching_ticket' | 'pt_ticket' | 'gathering_fee' | 'premium_skipped'; grantedTickets?: number; grantedPoints?: number }
   | { ok: false; kind: 'duplicate' | 'unknown_product' | 'not_eligible' | 'db_error'; message: string };
 
 async function insertPayment(payload: {
@@ -116,6 +117,36 @@ export async function grantAppleIapAndRecord(input: GrantPurchaseInput): Promise
     }
 
     // 2) 지급 로직
+    if (productId === 'com.hywoo.fitting.gathering_fee' || productRow.category === 'gathering') {
+      const applicationId = String(input.context?.gatheringApplicationId ?? '').trim();
+      if (!applicationId) {
+        return { ok: false, kind: 'db_error', message: 'missing gatheringApplicationId' };
+      }
+
+      const { data: appRow, error: appErr } = await supabase
+        .from('gathering_applications')
+        .select('id,status')
+        .eq('id', applicationId)
+        .eq('user_id', userId)
+        .limit(1)
+        .maybeSingle();
+      if (appErr) throw appErr;
+      if (!appRow) return { ok: false, kind: 'not_eligible', message: 'application not found' };
+
+      const curStatus = String((appRow as any)?.status ?? '').trim();
+      if (curStatus !== 'approved') {
+        return { ok: false, kind: 'not_eligible', message: `invalid application status: ${curStatus || '(empty)'}` };
+      }
+
+      const { error: upErr } = await supabase
+        .from('gathering_applications')
+        .update({ status: 'paid' })
+        .eq('id', applicationId);
+      if (upErr) throw upErr;
+
+      return { ok: true, kind: 'gathering_fee' };
+    }
+
     if (productId === 'com.hywoo.fitting.trainer_30' || productRow.category === 'pt_ticket') {
       // trainer_profiles 최신 1건 is_approved=true
       const { data: latestProfile, error: profErr } = await supabase

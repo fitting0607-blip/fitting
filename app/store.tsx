@@ -18,6 +18,7 @@ import { supabase } from '@/supabase';
 import {
   requestPurchase,
   isDuplicateLikeError,
+  setPendingGatheringApplicationId,
   subscribePurchaseUiIdle,
   subscribeIapGrantSuccess,
   ensureIapReady,
@@ -25,6 +26,7 @@ import {
 } from '@/iap/rniap';
 
 const MAIN = '#6C47FF';
+const GATHERING_FEE_PRODUCT_ID = 'com.hywoo.fitting.gathering_fee';
 
 function purchaseAlertMessage(e: unknown): string {
   const msg = String((e as { message?: string })?.message ?? '').trim();
@@ -46,6 +48,13 @@ type StoreItem = {
   bonus_points: number;
 };
 
+type MyGatheringApplication = {
+  id: string;
+  status: string | null;
+  gathering_id: string | null;
+  gatherings?: { title: string | null; date: string | null; price: number | null } | null;
+};
+
 export default function StoreScreen() {
   const router = useRouter();
   const [points, setPoints] = useState<number | null>(null);
@@ -53,11 +62,13 @@ export default function StoreScreen() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<StoreItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
-  const [tab, setTab] = useState<'matching' | 'pt'>('matching');
+  const [tab, setTab] = useState<'matching' | 'pt' | 'gathering'>('matching');
   const [purchasingSku, setPurchasingSku] = useState<string | null>(null);
 
   const [myPtEligible, setMyPtEligible] = useState(false);
   const [myPtLoading, setMyPtLoading] = useState(true);
+  const [myGathering, setMyGathering] = useState<MyGatheringApplication | null>(null);
+  const [myGatheringLoading, setMyGatheringLoading] = useState(true);
 
   const purchasingWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearPurchasingWatchdog = useCallback(() => {
@@ -264,6 +275,39 @@ export default function StoreScreen() {
     }
   }, []);
 
+  const loadMyGathering = useCallback(async () => {
+    setMyGatheringLoading(true);
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user?.id) {
+        setMyGathering(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('gathering_applications')
+        .select('id,status,gathering_id,gatherings(title,date,price),created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        setMyGathering(null);
+        return;
+      }
+      setMyGathering(data as unknown as MyGatheringApplication);
+    } catch {
+      setMyGathering(null);
+    } finally {
+      setMyGatheringLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       if (Platform.OS === 'ios') {
@@ -277,14 +321,20 @@ export default function StoreScreen() {
       }
       void load();
       void loadMyPt();
+      void loadMyGathering();
       void (async () => {
+        if (tab === 'gathering') {
+          setProducts([]);
+          setProductsLoading(false);
+          return;
+        }
         if (tab === 'pt') {
           await loadProducts('pt_ticket');
           return;
         }
         await loadMatchingProducts();
       })();
-    }, [load, loadMyPt, loadProducts, loadMatchingProducts, tab])
+    }, [load, loadMyPt, loadMyGathering, loadProducts, loadMatchingProducts, tab])
   );
 
   const goBack = useCallback(() => router.back(), [router]);
@@ -389,6 +439,49 @@ export default function StoreScreen() {
     [tab, myPtEligible, purchasingSku, clearPurchasingWatchdog]
   );
 
+  const onPayGathering = useCallback(async () => {
+    const status = String(myGathering?.status ?? '').trim();
+    if (status !== 'approved') return;
+    if (Platform.OS !== 'ios') {
+      Alert.alert('안내', '현재 iOS에서만 인앱결제를 지원합니다.');
+      return;
+    }
+    if (!myGathering?.id) return;
+    if (purchasingSku) {
+      Alert.alert('안내', '결제 처리 중입니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
+    const sku = GATHERING_FEE_PRODUCT_ID;
+    setPendingGatheringApplicationId(myGathering.id);
+    clearPurchasingWatchdog();
+    setPurchasingSku(sku);
+    purchasingWatchdogRef.current = setTimeout(() => {
+      setPurchasingSku((cur) => (cur === sku ? null : cur));
+    }, PURCHASE_SKU_STUCK_TIMEOUT_MS);
+    try {
+      console.log('[STORE] gathering requestPurchase start', {
+        sku,
+        gatheringApplicationId: myGathering.id,
+      });
+      await requestPurchase(sku);
+      console.log('[STORE] gathering requestPurchase returned', { sku });
+    } catch (e: any) {
+      console.error('[STORE] gathering requestPurchase catch', e);
+      const msg = String(e?.message ?? e ?? '');
+      if (isDuplicateLikeError({ code: e?.code, message: msg })) {
+        console.log('[RNIAP] duplicate skipped', { from: 'store onPayGathering', sku, msg });
+        clearPurchasingWatchdog();
+        setPurchasingSku(null);
+        return;
+      }
+      setPendingGatheringApplicationId(null);
+      clearPurchasingWatchdog();
+      setPurchasingSku(null);
+      Alert.alert('구매 실패', purchaseAlertMessage(e));
+    }
+  }, [myGathering, purchasingSku, clearPurchasingWatchdog]);
+
   const formatKRW = useCallback((value: number) => {
     const safe = Number.isFinite(value) ? value : 0;
     try {
@@ -458,9 +551,70 @@ export default function StoreScreen() {
           >
             <Text style={[styles.tabText, tab === 'pt' && styles.tabTextActive]}>피티권</Text>
           </Pressable>
+          <Pressable
+            onPress={() => setTab('gathering')}
+            style={[styles.tabBtn, tab === 'gathering' && styles.tabBtnActive]}
+            accessibilityRole="button"
+            accessibilityLabel="소모임 탭"
+          >
+            <Text style={[styles.tabText, tab === 'gathering' && styles.tabTextActive]}>소모임</Text>
+          </Pressable>
         </View>
 
-        <Text style={styles.sectionLabel}>{tab === 'pt' ? '피티권 구매' : '매칭권 구매'}</Text>
+        <Text style={styles.sectionLabel}>
+          {tab === 'gathering' ? '소모임 결제' : tab === 'pt' ? '피티권 구매' : '매칭권 구매'}
+        </Text>
+
+        {tab === 'gathering' ? (
+          myGatheringLoading ? (
+            <View style={styles.productsLoading}>
+              <ActivityIndicator size="small" color={MAIN} />
+              <Text style={styles.productsLoadingText}>불러오는 중…</Text>
+            </View>
+          ) : !myGathering ? (
+            <View style={styles.productsEmpty}>
+              <Text style={styles.productsEmptyText}>신청 내역이 없습니다.</Text>
+            </View>
+          ) : (
+            <View style={styles.noticeCard}>
+              <Text style={styles.noticeTitle}>{myGathering.gatherings?.title ?? '소모임'}</Text>
+              <Text style={styles.noticeSub}>
+                {String(myGathering.gatherings?.date ?? '').trim()
+                  ? `날짜: ${String(myGathering.gatherings?.date ?? '').trim()}`
+                  : '날짜: -'}
+              </Text>
+              <Text style={styles.noticeSub}>
+                {typeof myGathering.gatherings?.price === 'number'
+                  ? `가격: ₩${formatKRW(myGathering.gatherings.price)}`
+                  : '가격: -'}
+              </Text>
+
+              {String(myGathering.status ?? '') === 'pending' ? (
+                <Text style={styles.noticeText}>승인 대기 중</Text>
+              ) : String(myGathering.status ?? '') === 'paid' ? (
+                <Text style={styles.noticeText}>결제 완료</Text>
+              ) : String(myGathering.status ?? '') === 'approved' ? (
+                <Pressable
+                  onPress={onPayGathering}
+                  disabled={!!purchasingSku}
+                  style={({ pressed }) => [
+                    styles.buyBtn,
+                    !!purchasingSku && styles.buyBtnDisabled,
+                    pressed && !purchasingSku && styles.rowPressed,
+                  ]}
+                >
+                  {purchasingSku ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.buyBtnText}>결제하기</Text>
+                  )}
+                </Pressable>
+              ) : (
+                <Text style={styles.noticeText}>상태: {String(myGathering.status ?? 'pending')}</Text>
+              )}
+            </View>
+          )
+        ) : null}
 
         {tab === 'pt' && !myPtLoading && !myPtEligible ? (
           <View style={styles.noticeCard}>
@@ -468,16 +622,16 @@ export default function StoreScreen() {
           </View>
         ) : null}
 
-        {productsLoading ? (
+        {tab !== 'gathering' && productsLoading ? (
           <View style={styles.productsLoading}>
             <ActivityIndicator size="small" color={MAIN} />
             <Text style={styles.productsLoadingText}>상품 불러오는 중…</Text>
           </View>
-        ) : productsEmpty ? (
+        ) : tab !== 'gathering' && productsEmpty ? (
           <View style={styles.productsEmpty}>
             <Text style={styles.productsEmptyText}>현재 구매 가능한 상품이 없습니다.</Text>
           </View>
-        ) : (
+        ) : tab !== 'gathering' ? (
           products.map((item) => {
             const RowWrap = tab === 'pt' ? View : Pressable;
             const wrapProps =
@@ -561,7 +715,7 @@ export default function StoreScreen() {
               </RowWrap>
             );
           })
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -681,6 +835,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: MAIN,
+  },
+  noticeTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111111',
+    marginBottom: 4,
+  },
+  noticeSub: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
   },
   row: {
     flexDirection: 'row',

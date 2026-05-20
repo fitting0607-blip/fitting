@@ -1,15 +1,10 @@
 import Feather from '@expo/vector-icons/Feather';
+import Constants, { AppOwnership } from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  AdEventType,
-  MobileAds,
-  RewardedAd,
-  RewardedAdEventType,
-} from 'react-native-google-mobile-ads';
 import {
   ActivityIndicator,
   Alert,
@@ -40,6 +35,9 @@ const BANNER_RATIO = 240 / 670;
 const BANNER_WRAP_PADDING_BOTTOM = 14;
 const REWARDED_AD_UNIT_ID = 'ca-app-pub-7157702052156983/6731882730';
 
+/** Expo Go has no native RNGoogleMobileAds; never dynamically import the module there. */
+const IS_EXPO_GO = Constants.appOwnership === AppOwnership.Expo;
+
 type Banner = {
   id: string;
   image_url: string;
@@ -61,6 +59,7 @@ export default function RewardScreen() {
   const [adBusy, setAdBusy] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [exchangeBusy, setExchangeBusy] = useState(false);
+  const [gatheringStatus, setGatheringStatus] = useState<string | null>(null);
 
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -115,15 +114,24 @@ export default function RewardScreen() {
   }, [banners.length, clearBannerTimer, currentBannerIndex]);
 
   useEffect(() => {
-    try {
-      void MobileAds()
-        .initialize()
-        .catch((e: unknown) => {
-          console.error('[mobileAds] initialize failed', e);
-        });
-    } catch (e: unknown) {
-      console.error('[mobileAds] initialize threw', e);
-    }
+    if (IS_EXPO_GO) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { default: MobileAds } = await import('react-native-google-mobile-ads');
+        if (cancelled) return;
+        await MobileAds()
+          .initialize()
+          .catch((e: unknown) => {
+            console.error('[mobileAds] initialize failed', e);
+          });
+      } catch (e: unknown) {
+        if (!cancelled) console.error('[mobileAds] initialize threw', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -224,6 +232,7 @@ export default function RewardScreen() {
         setAttendanceDone(false);
         setAdWatchToday(0);
         setInviteCount(0);
+        setGatheringStatus(null);
         return;
       }
 
@@ -238,6 +247,29 @@ export default function RewardScreen() {
       const row = me as { points?: number; matching_tickets?: number } | null;
       setPoints(typeof row?.points === 'number' ? row.points : 0);
       setMatchingTickets(typeof row?.matching_tickets === 'number' ? row.matching_tickets : 0);
+
+      const { data: activeGathering, error: activeGatheringErr } = await supabase
+        .from('gatherings')
+        .select('id')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (activeGatheringErr) throw activeGatheringErr;
+      const gatheringId = (activeGathering as { id?: string } | null)?.id;
+      if (!gatheringId) {
+        setGatheringStatus(null);
+      } else {
+        const { data: gatheringApp, error: gatheringAppErr } = await supabase
+          .from('gathering_applications')
+          .select('status')
+          .eq('user_id', user.id)
+          .eq('gathering_id', gatheringId)
+          .maybeSingle();
+        if (gatheringAppErr) throw gatheringAppErr;
+        const appRow = gatheringApp as { status?: string } | null;
+        setGatheringStatus(appRow?.status ? String(appRow.status) : null);
+      }
 
       const todayStr = getLocalDateString(new Date());
 
@@ -286,6 +318,10 @@ export default function RewardScreen() {
 
   const goToStore = useCallback(() => {
     router.push('/store');
+  }, [router]);
+
+  const goToGathering = useCallback(() => {
+    router.push('/gathering');
   }, [router]);
 
   const onExchangeTicket = useCallback(async () => {
@@ -338,6 +374,21 @@ export default function RewardScreen() {
       setExchangeBusy(false);
     }
   }, [userId, exchangeBusy]);
+
+  const gatheringStatusText = useMemo(() => {
+    switch (gatheringStatus) {
+      case 'pending':
+        return '승인 대기 중';
+      case 'approved':
+        return '승인됨 - 결제 후 참여 가능';
+      case 'paid':
+        return '결제 완료';
+      case 'rejected':
+        return '신청 거절됨';
+      default:
+        return null;
+    }
+  }, [gatheringStatus]);
 
   const onAttendance = useCallback(async () => {
     if (!userId || attendanceDone || attendanceBusy) return;
@@ -412,6 +463,15 @@ export default function RewardScreen() {
 
   const onAdWatch = useCallback(async () => {
     if (!userId || adWatchToday >= 4 || adBusy) return;
+
+    if (IS_EXPO_GO) {
+      Alert.alert(
+        '안내',
+        'Expo Go에서는 광고(AdMob) 네이티브 모듈이 없어 광고 시청을 할 수 없어요. EAS 개발 빌드나 스토어 앱에서 이용해 주세요.'
+      );
+      return;
+    }
+
     setAdBusy(true);
     try {
       const { startISO, endISO } = getTodayRangeISO();
@@ -429,7 +489,21 @@ export default function RewardScreen() {
         return;
       }
 
-      let rewarded: RewardedAd;
+      let AdEventType: typeof import('react-native-google-mobile-ads').AdEventType;
+      let RewardedAd: typeof import('react-native-google-mobile-ads').RewardedAd;
+      let RewardedAdEventType: typeof import('react-native-google-mobile-ads').RewardedAdEventType;
+      try {
+        const ads = await import('react-native-google-mobile-ads');
+        AdEventType = ads.AdEventType;
+        RewardedAd = ads.RewardedAd;
+        RewardedAdEventType = ads.RewardedAdEventType;
+      } catch (e) {
+        console.error('[RewardedAd] dynamic import failed', e);
+        Alert.alert('안내', '광고를 불러올 수 없습니다');
+        return;
+      }
+
+      let rewarded: import('react-native-google-mobile-ads').RewardedAd;
       try {
         rewarded = RewardedAd.createForAdRequest(REWARDED_AD_UNIT_ID, {
           requestNonPersonalizedAdsOnly: true,
@@ -469,7 +543,7 @@ export default function RewardScreen() {
             unsubscribes.push(
               rewarded.addAdEventListener(AdEventType.LOADED, () => {
                 try {
-                  void rewarded.show().catch((e) => {
+                  void rewarded.show().catch((e: unknown) => {
                     console.error('[RewardedAd] show() failed', e);
                     settle(() => reject(e));
                   });
@@ -493,7 +567,7 @@ export default function RewardScreen() {
             );
 
             unsubscribes.push(
-              rewarded.addAdEventListener(AdEventType.ERROR, (error) => {
+              rewarded.addAdEventListener(AdEventType.ERROR, (error: unknown) => {
                 console.error('[RewardedAd] AdEventType.ERROR', error);
                 settle(() => reject(error));
               })
@@ -733,6 +807,34 @@ export default function RewardScreen() {
                   {exchangeDisabled ? '포인트 부족 (50p 필요)' : '50p로 매칭권 1개 교환'}
                 </Text>
               )}
+            </Pressable>
+          </View>
+
+          <Text style={styles.sectionLabel}>소모임</Text>
+
+          <View style={styles.card}>
+            <View style={styles.cardRow}>
+              <View style={styles.cardIconWrap}>
+                <Feather name="users" size={22} color={MAIN} />
+              </View>
+              <View style={styles.cardTextCol}>
+                <Text style={styles.cardTitle}>소모임</Text>
+                <Text style={styles.cardDesc}>오프라인으로 만나는 핏팅 멤버들. 신청하고 함께해요</Text>
+                {gatheringStatusText ? (
+                  <View style={styles.statusPill} accessibilityLabel={`소모임 신청 상태: ${gatheringStatusText}`}>
+                    <Text style={styles.statusPillText}>{gatheringStatusText}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            <Pressable
+              onPress={goToGathering}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                pressed && styles.primaryBtnPressed,
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>소모임 신청하기</Text>
             </Pressable>
           </View>
 
@@ -1014,5 +1116,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  statusPill: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(108, 71, 255, 0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: MAIN,
   },
 });

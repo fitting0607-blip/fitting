@@ -1,23 +1,48 @@
+import Constants, { AppOwnership } from 'expo-constants';
 import { Alert, Platform } from 'react-native';
-import {
-  endConnection as rnEndConnection,
-  fetchProducts as rnFetchProducts,
-  finishTransaction as rnFinishTransaction,
-  getAvailablePurchases as rnGetAvailablePurchases,
-  getPendingTransactionsIOS as rnGetPendingTransactionsIOS,
-  initConnection as rnInitConnection,
-  purchaseErrorListener,
-  purchaseUpdatedListener,
-  requestPurchase as rnRequestPurchase,
-  type MutationRequestPurchaseArgs,
-  type Product,
-  type Purchase,
-  type PurchaseError,
-} from 'react-native-iap';
 
 import { supabase } from '@/supabase';
 import { grantAppleIapAndRecord } from '@/iap/grant';
 import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
+
+/** Store / listeners pass purchase objects shaped by react-native-iap — no static import of its types. */
+export type IapPurchase = Record<string, unknown>;
+export type IapProduct = Record<string, unknown>;
+
+/**
+ * iOS native IAP only when not in Expo Go (NitroModules / react-native-iap unavailable there).
+ * Matches: Platform.OS === 'ios' && Constants.appOwnership !== 'expo'
+ */
+const CAN_USE_NATIVE_IAP =
+  Platform.OS === 'ios' && Constants.appOwnership !== AppOwnership.Expo;
+
+/** Narrow native module surface — loaded only via dynamic import when CAN_USE_NATIVE_IAP. */
+type ReactNativeIapModule = {
+  initConnection: () => Promise<boolean>;
+  endConnection: () => Promise<void>;
+  fetchProducts: (args: unknown) => Promise<unknown>;
+  getAvailablePurchases: () => Promise<unknown>;
+  getPendingTransactionsIOS: () => Promise<unknown>;
+  finishTransaction: (args: unknown) => Promise<void>;
+  requestPurchase: (args: unknown) => Promise<void>;
+  purchaseUpdatedListener: (cb: (purchase: unknown) => void) => { remove: () => void };
+  purchaseErrorListener: (cb: (error: unknown) => void) => { remove: () => void };
+};
+
+let nativeModulePromise: Promise<ReactNativeIapModule | null> | null = null;
+
+function loadNativeModuleOnce(): Promise<ReactNativeIapModule | null> {
+  if (!CAN_USE_NATIVE_IAP) return Promise.resolve(null);
+  if (!nativeModulePromise) {
+    nativeModulePromise = import('react-native-iap')
+      .then((m) => m as unknown as ReactNativeIapModule)
+      .catch((e: unknown) => {
+        console.error('[RNIAP] dynamic import react-native-iap failed', e);
+        return null;
+      });
+  }
+  return nativeModulePromise;
+}
 
 /** App Store Review: SKU/productId를 사용자 Alert에 노출하지 않음 */
 export const IAP_PURCHASE_USER_MESSAGE = '구매를 진행할 수 없습니다. 잠시 후 다시 시도해주세요.';
@@ -33,6 +58,14 @@ let connectingPromise: Promise<boolean> | null = null;
 // 같은 세션에서 이미 처리한 transactionId를 추적해 중복 purchaseUpdated/replay 이벤트를 silent skip 한다.
 const processedTransactionIds = new Set<string>();
 const inflightTransactionIds = new Set<string>();
+
+/** Gathering fee purchase needs application context to mark paid. */
+let pendingGatheringApplicationId: string | null = null;
+
+export function setPendingGatheringApplicationId(id: string | null): void {
+  const trimmed = String(id ?? '').trim();
+  pendingGatheringApplicationId = trimmed || null;
+}
 
 /** store.tsx 등에서 purchasingSku 해제 — listener는 rniap에만 있으므로 여기서 UI 동기화 */
 type PurchaseUiIdleListener = (info: { productId: string }) => void;
@@ -124,7 +157,7 @@ type ProcessResult =
   | { status: 'duplicate_finished'; transactionId: string; productId: string }
   | { status: 'finished'; transactionId: string; productId: string };
 
-async function processPurchaseLikeListener(purchase: Purchase, source: string): Promise<ProcessResult> {
+async function processPurchaseLikeListener(purchase: IapPurchase, source: string): Promise<ProcessResult> {
   const productId = String((purchase as any)?.productId ?? '').trim();
   const transactionId = extractIosTransactionId(purchase);
 
@@ -147,6 +180,10 @@ async function processPurchaseLikeListener(purchase: Purchase, source: string): 
     productId,
     transactionId,
     productRow: null,
+    context:
+      productId === 'com.hywoo.fitting.gathering_fee'
+        ? { gatheringApplicationId: pendingGatheringApplicationId }
+        : undefined,
   });
 
   if (!grantRes.ok) {
@@ -204,7 +241,7 @@ async function processPurchaseLikeListener(purchase: Purchase, source: string): 
 }
 
 export async function initConnection(): Promise<boolean> {
-  if (Platform.OS !== 'ios') {
+  if (!CAN_USE_NATIVE_IAP) {
     return false;
   }
   if (billingReady) return true;
@@ -212,7 +249,12 @@ export async function initConnection(): Promise<boolean> {
 
   connectingPromise = (async () => {
     try {
-      const ok = await rnInitConnection();
+      const iap = await loadNativeModuleOnce();
+      if (!iap) {
+        billingReady = false;
+        return false;
+      }
+      const ok = await iap.initConnection();
       billingReady = Boolean(ok);
       if (!billingReady) {
         console.warn('[RNIAP] initConnection native returned false');
@@ -232,7 +274,7 @@ export async function initConnection(): Promise<boolean> {
 
 /** Store 진입 등 선제 초기화 — 실패해도 throw 하지 않음 */
 export async function ensureIapReady(): Promise<boolean> {
-  if (Platform.OS !== 'ios') return false;
+  if (!CAN_USE_NATIVE_IAP) return false;
   try {
     const ok = await initConnection();
     if (!ok) {
@@ -247,9 +289,14 @@ export async function ensureIapReady(): Promise<boolean> {
 }
 
 export async function endConnection(): Promise<void> {
-  if (Platform.OS !== 'ios') return;
+  if (!CAN_USE_NATIVE_IAP) return;
   try {
-    await rnEndConnection();
+    const iap = await loadNativeModuleOnce();
+    if (!iap) {
+      billingReady = false;
+      return;
+    }
+    await iap.endConnection();
   } catch (e) {
     console.error('[RNIAP] endConnection error', e);
   } finally {
@@ -257,17 +304,19 @@ export async function endConnection(): Promise<void> {
   }
 }
 
-export async function fetchProducts(productIds: readonly string[] = getAllAppleProductIds()): Promise<Product[]> {
-  if (Platform.OS !== 'ios') return [];
+export async function fetchProducts(productIds: readonly string[] = getAllAppleProductIds()): Promise<IapProduct[]> {
+  if (!CAN_USE_NATIVE_IAP) return [];
   try {
     const ok = await initConnection();
     if (!ok) {
       console.warn('[RNIAP] fetchProducts skipped: billing not ready');
       return [];
     }
+    const iap = await loadNativeModuleOnce();
+    if (!iap) return [];
     const ids = productIds.map((x) => String(x ?? '').trim()).filter(Boolean);
-    const products = (await rnFetchProducts({ skus: ids, type: 'in-app' } as any)) as Product[] | null | undefined;
-    const list = (products ?? []) as Product[];
+    const products = (await iap.fetchProducts({ skus: ids, type: 'in-app' } as any)) as IapProduct[] | null | undefined;
+    const list = (products ?? []) as IapProduct[];
     return list;
   } catch (e) {
     console.error('[RNIAP] fetchProducts error', e);
@@ -278,7 +327,7 @@ export async function fetchProducts(productIds: readonly string[] = getAllAppleP
 /** fetchProducts 별칭 — requestPurchase 직전 SKU 검증용 */
 export const getProducts = fetchProducts;
 
-function getProductLogFields(p: Product): { productId: string; title: string; price: string } {
+function getProductLogFields(p: IapProduct): { productId: string; title: string; price: string } {
   const productId = getProductIdFromProduct(p);
   const title = String((p as any)?.title ?? (p as any)?.name ?? '').trim();
   const price = String(
@@ -287,16 +336,18 @@ function getProductLogFields(p: Product): { productId: string; title: string; pr
   return { productId, title, price };
 }
 
-export async function getAvailablePurchases(): Promise<Purchase[]> {
-  if (Platform.OS !== 'ios') return [];
+export async function getAvailablePurchases(): Promise<IapPurchase[]> {
+  if (!CAN_USE_NATIVE_IAP) return [];
   try {
     const ok = await initConnection();
     if (!ok) {
       Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
       return [];
     }
-    const list = (await rnGetAvailablePurchases()) as Purchase[] | null | undefined;
-    return (list ?? []) as Purchase[];
+    const iap = await loadNativeModuleOnce();
+    if (!iap) return [];
+    const list = (await iap.getAvailablePurchases()) as IapPurchase[] | null | undefined;
+    return (list ?? []) as IapPurchase[];
   } catch (e) {
     console.error('[RNIAP] getAvailablePurchases error', e);
     Alert.alert('결제 오류', String((e as any)?.message ?? e ?? 'getAvailablePurchases error'));
@@ -305,7 +356,7 @@ export async function getAvailablePurchases(): Promise<Purchase[]> {
 }
 
 export async function debugReprocessPendingPurchases(): Promise<void> {
-  if (Platform.OS !== 'ios') return;
+  if (!CAN_USE_NATIVE_IAP) return;
   try {
     const purchases = await getAvailablePurchases();
     if (purchases.length === 0) {
@@ -354,14 +405,17 @@ export async function debugReprocessPendingPurchases(): Promise<void> {
  * - Must be manually invoked from a debug button only.
  */
 export async function debugClearTransactionQueueIOS(): Promise<void> {
-  if (Platform.OS !== 'ios') return;
+  if (!CAN_USE_NATIVE_IAP) return;
   console.log('[IAP] clearTransactionIOS start');
   try {
     const ok = await initConnection();
     if (!ok) throw new Error('initConnection failed');
 
+    const iap = await loadNativeModuleOnce();
+    if (!iap) throw new Error('react-native-iap module unavailable');
+
     // react-native-iap v15 exports getPendingTransactionsIOS (clearTransactionIOS may not exist)
-    const pending = ((await rnGetPendingTransactionsIOS()) as Purchase[] | null | undefined) ?? [];
+    const pending = ((await iap.getPendingTransactionsIOS()) as IapPurchase[] | null | undefined) ?? [];
     for (const p of pending) {
       console.log(
         '[IAP] finishing pending transaction only',
@@ -371,7 +425,7 @@ export async function debugClearTransactionQueueIOS(): Promise<void> {
         })
       );
       // finish only; no DB grant/recording; do NOT use custom wrapper
-      await rnFinishTransaction({
+      await iap.finishTransaction({
         purchase: p,
         isConsumable: true,
       } as any);
@@ -394,7 +448,7 @@ export async function debugClearTransactionQueueIOS(): Promise<void> {
   }
 }
 
-export function getProductIdFromProduct(p: Product | null | undefined): string {
+export function getProductIdFromProduct(p: IapProduct | null | undefined): string {
   if (!p) return '';
   return String((p as any)?.id ?? (p as any)?.productId ?? '').trim();
 }
@@ -413,6 +467,9 @@ export async function requestPurchase(productId: string): Promise<void> {
   if (Platform.OS !== 'ios') {
     return;
   }
+  if (!CAN_USE_NATIVE_IAP) {
+    throw new Error(IAP_PURCHASE_USER_MESSAGE);
+  }
   const sku = String(productId ?? '').trim();
   if (!sku) throw new Error('missing productId');
   if (sku === 'com.hywoo.fitting.ticket_unlimited') {
@@ -422,6 +479,11 @@ export async function requestPurchase(productId: string): Promise<void> {
   const ok = await initConnection();
   if (!ok) {
     throw new Error('결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
+  }
+
+  const iap = await loadNativeModuleOnce();
+  if (!iap) {
+    throw new Error(IAP_PURCHASE_USER_MESSAGE);
   }
 
   const storeProducts = await getProducts([sku]);
@@ -436,7 +498,7 @@ export async function requestPurchase(productId: string): Promise<void> {
 
   // Ensure we always finish manually only after DB grant succeeds.
   // react-native-iap v8+ (current: v15) expects an object payload.
-  const payload: MutationRequestPurchaseArgs = {
+  const payload = {
     type: 'in-app',
     request: {
       apple: {
@@ -446,7 +508,7 @@ export async function requestPurchase(productId: string): Promise<void> {
     },
   };
   try {
-    await rnRequestPurchase(payload as any);
+    await iap.requestPurchase(payload as any);
   } catch (e: any) {
     console.error('[IAP] requestPurchase throw', e);
     await invalidateBillingConnection('requestPurchase failed');
@@ -455,119 +517,132 @@ export async function requestPurchase(productId: string): Promise<void> {
 }
 
 export function startListeners(): void {
-  if (Platform.OS !== 'ios') return;
+  if (!CAN_USE_NATIVE_IAP) return;
   if (listenersStarted) return;
   listenersStarted = true;
 
-  purchaseUpdatedSub = purchaseUpdatedListener(async (purchase: Purchase) => {
-    let transactionId = '';
-    let productId = '';
-    let skipPurchaseUiIdle = false;
+  void (async () => {
+    const iap = await loadNativeModuleOnce();
+    if (!iap) {
+      console.warn('[RNIAP] startListeners: native module unavailable');
+      listenersStarted = false;
+      return;
+    }
     try {
-      productId = String((purchase as any)?.productId ?? '').trim();
-      transactionId = extractIosTransactionId(purchase);
-
-      // 1) 같은 세션에서 이미 처리한 transactionId면 silent skip
-      if (processedTransactionIds.has(transactionId)) {
-        console.log('[RNIAP] duplicate skipped', {
-          reason: 'already processed in session',
-          transactionId,
-          productId,
-        });
+      purchaseUpdatedSub = iap.purchaseUpdatedListener(async (purchase: unknown) => {
+        let transactionId = '';
+        let productId = '';
+        let skipPurchaseUiIdle = false;
         try {
-          await finishTransaction(purchase, productId);
-        } catch (finishErr: any) {
-          console.log('[RNIAP] duplicate skipped finishTransaction error', finishErr);
-          Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
+          productId = String((purchase as any)?.productId ?? '').trim();
+          transactionId = extractIosTransactionId(purchase as IapPurchase);
+
+          // 1) 같은 세션에서 이미 처리한 transactionId면 silent skip
+          if (processedTransactionIds.has(transactionId)) {
+            console.log('[RNIAP] duplicate skipped', {
+              reason: 'already processed in session',
+              transactionId,
+              productId,
+            });
+            try {
+              await finishTransaction(purchase as IapPurchase, productId);
+            } catch (finishErr: any) {
+              console.log('[RNIAP] duplicate skipped finishTransaction error', finishErr);
+              Alert.alert('결제 처리 실패', String(finishErr?.message ?? finishErr ?? 'finishTransaction error'));
+            }
+            return;
+          }
+
+          // 2) 같은 transactionId에 대해 동시 처리 중이면 silent skip
+          if (inflightTransactionIds.has(transactionId)) {
+            console.log('[RNIAP] duplicate skipped', {
+              reason: 'inflight',
+              transactionId,
+              productId,
+            });
+            skipPurchaseUiIdle = true;
+            return;
+          }
+          inflightTransactionIds.add(transactionId);
+
+          await processPurchaseLikeListener(purchase as IapPurchase, 'listener');
+        } catch (e: any) {
+          const msg = String(e?.message ?? e ?? '');
+          if (isAuthSessionMissingError({ code: e?.code, message: msg })) {
+            console.log('[RNIAP] skip purchase update without auth session', {
+              transactionId,
+              productId,
+              msg,
+            });
+            return;
+          }
+          if (isDuplicateLikeError({ message: msg })) {
+            console.log('[RNIAP] duplicate skipped', {
+              reason: 'thrown',
+              transactionId,
+              productId,
+              msg,
+            });
+            return;
+          }
+          console.error('[RNIAP] purchaseUpdatedListener handler error (NOT finishing)', e);
+          Alert.alert('결제 처리 실패', msg || '결제 처리 중 오류가 발생했습니다.');
+        } finally {
+          if (transactionId) inflightTransactionIds.delete(transactionId);
+          if (!skipPurchaseUiIdle && productId) {
+            emitPurchaseUiIdle(productId);
+          }
         }
-        return;
-      }
-
-      // 2) 같은 transactionId에 대해 동시 처리 중이면 silent skip
-      if (inflightTransactionIds.has(transactionId)) {
-        console.log('[RNIAP] duplicate skipped', {
-          reason: 'inflight',
-          transactionId,
-          productId,
-        });
-        skipPurchaseUiIdle = true;
-        return;
-      }
-      inflightTransactionIds.add(transactionId);
-
-      await processPurchaseLikeListener(purchase, 'listener');
-    } catch (e: any) {
-      const msg = String(e?.message ?? e ?? '');
-      if (isAuthSessionMissingError({ code: e?.code, message: msg })) {
-        console.log('[RNIAP] skip purchase update without auth session', {
-          transactionId,
-          productId,
-          msg,
-        });
-        return;
-      }
-      if (isDuplicateLikeError({ message: msg })) {
-        console.log('[RNIAP] duplicate skipped', {
-          reason: 'thrown',
-          transactionId,
-          productId,
-          msg,
-        });
-        return;
-      }
-      console.error('[RNIAP] purchaseUpdatedListener handler error (NOT finishing)', e);
-      Alert.alert('결제 처리 실패', msg || '결제 처리 중 오류가 발생했습니다.');
-    } finally {
-      if (transactionId) inflightTransactionIds.delete(transactionId);
-      if (!skipPurchaseUiIdle && productId) {
-        emitPurchaseUiIdle(productId);
-      }
-    }
-  });
-
-  purchaseErrorSub = purchaseErrorListener((error: PurchaseError) => {
-    const code = String((error as any)?.code ?? '').trim();
-    const message = String((error as any)?.message ?? '');
-    const skuFromErr = String((error as any)?.productId ?? (error as any)?.sku ?? '').trim();
-
-    console.error('[IAP] purchaseErrorListener', error);
-
-    const lowerMsg = message.toLowerCase();
-    if (lowerMsg.includes('billing is not prepared')) {
-      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
-      Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
-      return;
-    }
-
-    // native(iOS)에서 중복 purchaseUpdated 이벤트를 감지했을 때 보내는 duplicate-purchase 에러는
-    // 결제 실패가 아니라 dedup 알림이므로 사용자 Alert 없이 조용히 skip
-    if (isDuplicateLikeError({ code, message })) {
-      console.log('[RNIAP] duplicate skipped', {
-        reason: 'purchaseErrorListener',
-        code,
-        message,
       });
-      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
-      return;
-    }
 
-    if (isAuthSessionMissingError({ code, message })) {
-      console.log('[RNIAP] skip purchase error without auth session', { code, message });
-      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
-      return;
-    }
+      purchaseErrorSub = iap.purchaseErrorListener((error: unknown) => {
+        const code = String((error as any)?.code ?? '').trim();
+        const message = String((error as any)?.message ?? '');
+        const skuFromErr = String((error as any)?.productId ?? (error as any)?.sku ?? '').trim();
 
-    if (isUserCancelLikeError({ code, message })) {
-      if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
-      return;
-    }
+        console.error('[IAP] purchaseErrorListener', error);
 
-    if (skuFromErr) {
-      emitPurchaseUiIdle(skuFromErr);
-    }
+        const lowerMsg = message.toLowerCase();
+        if (lowerMsg.includes('billing is not prepared')) {
+          if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+          Alert.alert('결제 오류', '결제 준비 중입니다. 잠시 후 다시 시도해주세요.');
+          return;
+        }
 
-    Alert.alert('결제 오류', IAP_PURCHASE_USER_MESSAGE);
-  });
+        // native(iOS)에서 중복 purchaseUpdated 이벤트를 감지했을 때 보내는 duplicate-purchase 에러는
+        // 결제 실패가 아니라 dedup 알림이므로 사용자 Alert 없이 조용히 skip
+        if (isDuplicateLikeError({ code, message })) {
+          console.log('[RNIAP] duplicate skipped', {
+            reason: 'purchaseErrorListener',
+            code,
+            message,
+          });
+          if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+          return;
+        }
+
+        if (isAuthSessionMissingError({ code, message })) {
+          console.log('[RNIAP] skip purchase error without auth session', { code, message });
+          if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+          return;
+        }
+
+        if (isUserCancelLikeError({ code, message })) {
+          if (skuFromErr) emitPurchaseUiIdle(skuFromErr);
+          return;
+        }
+
+        if (skuFromErr) {
+          emitPurchaseUiIdle(skuFromErr);
+        }
+
+        Alert.alert('결제 오류', IAP_PURCHASE_USER_MESSAGE);
+      });
+    } catch (e) {
+      console.error('[RNIAP] startListeners registration failed', e);
+      listenersStarted = false;
+    }
+  })();
 }
 
 export function stopListeners(): void {
@@ -583,19 +658,21 @@ export function stopListeners(): void {
   listenersStarted = false;
 }
 
-export async function finishTransaction(purchase: Purchase, productId?: string): Promise<void> {
-  if (Platform.OS !== 'ios') return;
+export async function finishTransaction(purchase: IapPurchase, productId?: string): Promise<void> {
+  if (!CAN_USE_NATIVE_IAP) return;
+  const iap = await loadNativeModuleOnce();
+  if (!iap) return;
   const pid = String(productId ?? (purchase as any)?.productId ?? '').trim();
   const isConsumable = getIsConsumable(pid);
   try {
-    await rnFinishTransaction({ purchase, isConsumable } as any);
+    await iap.finishTransaction({ purchase, isConsumable } as any);
   } catch (e: any) {
     console.error('[RNIAP] rnFinishTransaction failed', { pid, e });
     throw e;
   }
 }
 
-export function extractIosTransactionId(purchase: Purchase): string {
+export function extractIosTransactionId(purchase: IapPurchase): string {
   const t1 = String((purchase as any)?.transactionId ?? '').trim();
   if (t1) return t1;
 
@@ -632,4 +709,3 @@ function getAllAppleProductIds(): readonly string[] {
     ...APPLE_PRODUCT_IDS.premium,
   ];
 }
-
