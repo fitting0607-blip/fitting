@@ -151,6 +151,9 @@
 - 게시물 작성/삭제 (사진 1장, 크롭 기능)
   - (2026-04-23) 게시물 작성 시 크롭 제거 (원본 선택)
   - (2026-04-24) 유저 게시물 삭제: posts row DELETE → is_deleted=true 소프트딜리트로 변경 (본인 게시물만)
+  - 게시물 삭제 RLS 버그 수정:
+    - posts_select_not_deleted 정책에 작성자 본인 예외 추가 (is_deleted = false OR auth.uid() = user_id)
+    - soft delete(is_deleted=true) 시 SELECT policy 충돌 문제 해결
   - (2026-04-24) 일일 게시물 작성 횟수 카운트 정확성 수정 (삭제된 게시물도 카운트에 포함)
   - 게시물 작성 사진 선택 후 다음 버튼 표시 버그 수정
     - 하단 고정 CTA 버튼 추가 (사진 선택 후 표시)
@@ -461,7 +464,7 @@
   - messages SELECT 정책 수정 (room_id in 방식으로 변경)
 - matches, posts, users → RLS 활성화 및 정책 설정 완료
   - matches: 본인 requester/target만 조회, requester만 INSERT/DELETE
-  - posts: is_deleted=false 전체 조회, 본인만 INSERT/UPDATE/DELETE
+  - posts: is_deleted=false 전체 조회(작성자 본인은 is_deleted=true도 조회 가능), 본인만 INSERT/UPDATE/DELETE
   - users: 로그인 유저 전체 조회, 본인만 UPDATE
 - admin_delete_users, admin_delete_posts RLS 정책 추가
 - banners RLS 정책 추가 (전체 조회, 관리자만 CUD)
