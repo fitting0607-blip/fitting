@@ -394,9 +394,15 @@
   - (2026-04-23) 지도 탭 검색 기능 수정 (Google Places API 키 fallback 처리)
   - 지도 탭 트레이너 마커 표시 추가
     - is_approved=true 트레이너 위치를 지도에 마커로 표시
-    - 마커에 트레이너 profile_images[0] 원형 썸네일 표시 (없으면 기본 아이콘)
+    - users.profile_image_url 원형 썸네일 표시 (없으면 닉네임 첫 글자), 테두리 #3B3BF9
     - 마커 탭 시 trainer-detail 화면으로 이동
     - latitude/longitude null인 트레이너 제외
+    - 변경 파일: app/(tabs)/map.tsx
+  - 트레이너 지도 화면 등록 삭제 버튼 추가
+    - 등록 완료(approved + is_approved) 상태에서 "등록 삭제" 버튼 표시 (빨간 outlined)
+    - 확인 Alert 후 trainer_profiles 본인 row 삭제 (user_id = auth.uid())
+    - users.is_trainer = false 업데이트, 삭제 완료 Alert 후 화면 새로고침
+    - 변경 파일: app/(tabs)/map.tsx
 - 지도 Google Maps API 키 주입 경로 수정
   - ios.googleMapsApiKey → ios.config.googleMapsApiKey
   - android.googleMaps.apiKey → android.config.googleMaps.apiKey
@@ -404,6 +410,10 @@
 - 트레이너 상태 흐름 수정 (pending → approved+미결제 → approved+결제완료)
 - 결제 대기 중 상태에서 결제하기 버튼 → 상점으로 이동
 - 피티 등록 신청 화면 (3단계 플로우, 자격증 선택사항, 승인 대기/취소/결제 대기 상태)
+  - 제출 시 facility_addr를 Google Geocoding API로 위도/경도 자동 변환 후 trainer_profiles에 저장
+  - 변환 실패 시 latitude/longitude null 저장 (등록 차단 없음)
+  - 기존 앱 Google Maps/Places API 키 재사용
+  - 변경 파일: app/trainer-apply.tsx, app/utils/googleGeocoding.ts
 - 트레이너 상세 화면
   - 지도 트레이너 상세 화면 기능 추가
     - 피티 매칭하기 버튼: 매칭권 사용 팝업 연결 (useMatchModal 재사용), 매칭 성공 시 채팅방 이동

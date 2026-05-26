@@ -1,7 +1,6 @@
 import Feather from '@expo/vector-icons/Feather';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
@@ -17,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
+import { geocodeAddress } from '@/app/utils/googleGeocoding';
 import { decodeBase64ToBytes, PUBLIC_UPLOAD_BUCKET } from '@/app/utils/imageBytes';
 
 const MAIN = '#3B3BF9';
@@ -53,14 +53,11 @@ export default function TrainerApplyScreen() {
   const [facilityName, setFacilityName] = useState('');
   const [facilityAddr, setFacilityAddr] = useState('');
   const [facilityAddrDetail, setFacilityAddrDetail] = useState('');
-  const [latitude, setLatitude] = useState<number | null>(null);
-  const [longitude, setLongitude] = useState<number | null>(null);
 
   const [profileImages, setProfileImages] = useState<Picked[]>([]);
   const [intro, setIntro] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
-  const [locating, setLocating] = useState(false);
 
   const pickFacility = useCallback(async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -123,25 +120,6 @@ export default function TrainerApplyScreen() {
     setProfileImages([...profileImages, ...result.assets].slice(0, MAX_PROFILE));
   }, [profileImages]);
 
-  const fillLocation = useCallback(async () => {
-    setLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('권한 필요', '시설 좌표를 찍으려면 위치 권한이 필요해요.');
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setLatitude(pos.coords.latitude);
-      setLongitude(pos.coords.longitude);
-      Alert.alert('완료', '현재 위치를 시설 좌표로 저장했어요. (지도 마커 표시에 사용돼요)');
-    } catch (e: unknown) {
-      Alert.alert('오류', e instanceof Error ? e.message : '위치를 가져오지 못했어요.');
-    } finally {
-      setLocating(false);
-    }
-  }, []);
-
   const goNextFrom1 = useCallback(() => {
     if (facilityImages.length === 0) {
       Alert.alert('입력 확인', '시설 사진을 1장 이상 추가해 주세요.');
@@ -196,11 +174,16 @@ export default function TrainerApplyScreen() {
         profileUrls.push(await uploadAsset(user.id, profileImages[i]!, 'profile', i));
       }
 
+      const addrMain = facilityAddr.trim();
+      const addrDetail = facilityAddrDetail.trim();
+      const geocodeQuery = addrDetail ? `${addrMain} ${addrDetail}` : addrMain;
+      const { latitude, longitude } = await geocodeAddress(geocodeQuery);
+
       const { error: insertErr } = await supabase.from('trainer_profiles').insert({
         user_id: user.id,
         facility_name: facilityName.trim(),
-        facility_addr: facilityAddr.trim(),
-        facility_addr_detail: facilityAddrDetail.trim() || null,
+        facility_addr: addrMain,
+        facility_addr_detail: addrDetail || null,
         intro: introTrim,
         latitude,
         longitude,
@@ -226,8 +209,6 @@ export default function TrainerApplyScreen() {
     facilityImages,
     facilityName,
     intro,
-    latitude,
-    longitude,
     profileImages,
     submitting,
   ]);
@@ -317,23 +298,6 @@ export default function TrainerApplyScreen() {
                 placeholderTextColor="#9CA3AF"
                 style={[styles.input, styles.inputMt]}
               />
-
-              <Pressable
-                style={[styles.secondaryBtn, styles.mt]}
-                onPress={() => void fillLocation()}
-                disabled={locating}
-              >
-                {locating ? (
-                  <ActivityIndicator color={MAIN} />
-                ) : (
-                  <Text style={styles.secondaryBtnText}>현재 위치를 시설 좌표로 저장 (지도 마커용)</Text>
-                )}
-              </Pressable>
-              {latitude != null && longitude != null ? (
-                <Text style={styles.coordHint}>
-                  좌표: {latitude.toFixed(5)}, {longitude.toFixed(5)}
-                </Text>
-              ) : null}
 
               <Text style={[styles.label, styles.mt]}>자격증 사진 (최대 {MAX_CERT}장) (선택)</Text>
               {thumbGrid(certImages, (i) => setCertImages((prev) => prev.filter((_, idx) => idx !== i)))}
@@ -557,24 +521,6 @@ const styles = StyleSheet.create({
     color: MAIN,
     fontWeight: '600',
     fontSize: 15,
-  },
-  secondaryBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: '#EEF2FF',
-    alignItems: 'center',
-  },
-  secondaryBtnText: {
-    color: MAIN,
-    fontWeight: '600',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  coordHint: {
-    marginTop: 8,
-    fontSize: 12,
-    color: '#6B7280',
   },
   primaryBtn: {
     backgroundColor: MAIN,

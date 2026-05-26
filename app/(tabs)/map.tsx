@@ -89,6 +89,17 @@ type PlacePrediction = {
 
 type MyTrainerRow = { id: string; status: string | null; is_approved: boolean | null };
 
+type TrainerUserInfo = {
+  nickname: string;
+  profile_image_url: string | null;
+};
+
+function nicknameInitial(nickname: string): string {
+  const trimmed = nickname.trim();
+  if (!trimmed) return '트';
+  return [...trimmed][0] ?? '트';
+}
+
 export default function MapScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -96,7 +107,7 @@ export default function MapScreen() {
   const [initialRegion] = useState<Region>(SEOUL_REGION);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'denied' | 'ready'>('loading');
   const [trainers, setTrainers] = useState<TrainerProfileRow[]>([]);
-  const [nicknames, setNicknames] = useState<Record<string, string>>({});
+  const [trainerUsers, setTrainerUsers] = useState<Record<string, TrainerUserInfo>>({});
   const [listLoading, setListLoading] = useState(true);
   const [areaLabel, setAreaLabel] = useState('위치 확인 중');
 
@@ -184,24 +195,28 @@ export default function MapScreen() {
 
       const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
       if (userIds.length === 0) {
-        setNicknames({});
+        setTrainerUsers({});
         return;
       }
 
       const { data: usersData, error: usersError } = await supabase
         .from('users')
-        .select('id, nickname')
+        .select('id, nickname, profile_image_url')
         .in('id', userIds);
 
       if (usersError) throw usersError;
 
-      const map: Record<string, string> = {};
+      const map: Record<string, TrainerUserInfo> = {};
       for (const u of usersData ?? []) {
         const id = (u as { id: string }).id;
         const nickname = (u as { nickname: string | null }).nickname;
-        map[id] = nickname?.trim() ? nickname : '트레이너';
+        const profileImageUrl = (u as { profile_image_url: string | null }).profile_image_url;
+        map[id] = {
+          nickname: nickname?.trim() ? nickname : '트레이너',
+          profile_image_url: profileImageUrl?.trim() ? profileImageUrl : null,
+        };
       }
-      setNicknames(map);
+      setTrainerUsers(map);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '목록을 불러오지 못했어요.';
       Alert.alert('오류', msg);
@@ -374,7 +389,7 @@ export default function MapScreen() {
 
   const renderTrainerCard = useCallback(
     ({ item }: { item: TrainerProfileRow }) => {
-      const rawName = nicknames[item.user_id] ?? '트레이너';
+      const rawName = trainerUsers[item.user_id]?.nickname ?? '트레이너';
       const displayName = rawName.endsWith('피티') ? rawName : `${rawName} 피티`;
       const thumb = item.profile_images?.[0] ?? item.facility_images?.[0] ?? null;
       const addr = addressLine(item);
@@ -410,7 +425,7 @@ export default function MapScreen() {
         </Pressable>
       );
     },
-    [addressLine, nicknames, router]
+    [addressLine, trainerUsers, router]
   );
 
   const listHeader = useMemo(
@@ -460,6 +475,46 @@ export default function MapScreen() {
       },
     ]);
   }, [loadTrainers, myTrainer?.id, myTrainerBusy]);
+
+  const deleteTrainerRegistration = useCallback(() => {
+    if (myTrainerBusy) return;
+    Alert.alert('피티 등록을 삭제하시겠어요?', undefined, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          setMyTrainerBusy(true);
+          try {
+            const {
+              data: { user },
+              error: authErr,
+            } = await supabase.auth.getUser();
+            if (authErr) throw authErr;
+            if (!user?.id) throw new Error('로그인이 필요합니다.');
+
+            const { error: delErr } = await supabase.from('trainer_profiles').delete().eq('user_id', user.id);
+            if (delErr) throw delErr;
+
+            const { error: updErr } = await supabase
+              .from('users')
+              .update({ is_trainer: false })
+              .eq('id', user.id);
+            if (updErr) throw updErr;
+
+            Alert.alert('삭제 완료');
+            setMyTrainer(null);
+            await loadMyTrainer();
+            await loadTrainers();
+          } catch (e: unknown) {
+            Alert.alert('삭제 실패', e instanceof Error ? e.message : '잠시 후 다시 시도해주세요.');
+          } finally {
+            setMyTrainerBusy(false);
+          }
+        },
+      },
+    ]);
+  }, [loadMyTrainer, loadTrainers, myTrainerBusy]);
 
   const floatingHeader = (
     <View
@@ -518,8 +573,19 @@ export default function MapScreen() {
           </Pressable>
         </View>
       ) : myTrainer?.status === 'approved' && myTrainer.is_approved === true ? (
-        <View style={styles.statePill}>
-          <Text style={styles.statePillText}>등록 완료</Text>
+        <View style={styles.headerRightRow}>
+          <View style={styles.statePill}>
+            <Text style={styles.statePillText}>등록 완료</Text>
+          </View>
+          <Pressable
+            style={[styles.deleteBtn, myTrainerBusy && styles.btnDisabled]}
+            onPress={deleteTrainerRegistration}
+            accessibilityRole="button"
+            accessibilityLabel="등록 삭제"
+            disabled={myTrainerBusy}
+          >
+            <Text style={styles.deleteBtnText}>등록 삭제</Text>
+          </Pressable>
         </View>
       ) : (
         <Pressable
@@ -558,8 +624,9 @@ export default function MapScreen() {
             {trainersWithMarkers.map((t) => {
               const lat = parseCoord(t.latitude)!;
               const lng = parseCoord(t.longitude)!;
-              const title = nicknames[t.user_id] ?? '트레이너';
-              const thumb = t.profile_images?.[0] ?? null;
+              const userInfo = trainerUsers[t.user_id];
+              const title = userInfo?.nickname ?? '트레이너';
+              const avatarUrl = userInfo?.profile_image_url ?? null;
               return (
                 <Marker
                   key={t.id}
@@ -572,15 +639,15 @@ export default function MapScreen() {
                 >
                   <View style={styles.trainerMarkerWrap}>
                     <View style={styles.trainerMarkerRing}>
-                      {thumb ? (
+                      {avatarUrl ? (
                         <Image
-                          source={{ uri: thumb }}
+                          source={{ uri: avatarUrl }}
                           style={styles.trainerMarkerImg}
                           contentFit="cover"
                         />
                       ) : (
                         <View style={styles.trainerMarkerFallback}>
-                          <Feather name="user" size={18} color="#FFFFFF" />
+                          <Text style={styles.trainerMarkerInitial}>{nicknameInitial(title)}</Text>
                         </View>
                       )}
                     </View>
@@ -858,6 +925,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#EF4444',
   },
+  deleteBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  deleteBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#EF4444',
+  },
   payBtn: {
     flex: 1,
     minWidth: 0,
@@ -1091,6 +1171,11 @@ const styles = StyleSheet.create({
     backgroundColor: MAIN,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  trainerMarkerInitial: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   trainerMarkerPointer: {
     width: 0,
