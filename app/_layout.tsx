@@ -4,7 +4,7 @@ import Constants, { AppOwnership } from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -18,6 +18,7 @@ import {
   subscribeIapPurchaseFlowChange,
 } from '@/iap/rniap';
 import { supabase } from '../supabase';
+import SplashScreen from './splash';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -30,6 +31,7 @@ export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
   const [iapFlowRevision, setIapFlowRevision] = useState(0);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -102,6 +104,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!isReady) return;
+    if (showSplash) return;
     if (hasSession) return;
     if (isIapPurchaseFlowActive()) return;
 
@@ -111,7 +114,7 @@ export default function RootLayout() {
     if (onAuthScreen) return;
 
     router.replace('/login');
-  }, [isReady, hasSession, segments, router, iapFlowRevision]);
+  }, [isReady, showSplash, hasSession, segments, router, iapFlowRevision]);
 
   useEffect(() => {
     // handle notification taps
@@ -144,10 +147,23 @@ export default function RootLayout() {
         <Stack.Screen name="block-list" options={{ headerShown: false }} />
         <Stack.Screen name="trainer-detail" options={{ headerShown: false }} />
         <Stack.Screen name="trainer-apply" options={{ headerShown: false }} />
+        <Stack.Screen name="splash" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
+      {showSplash ? (
+        <View style={styles.splashOverlay} pointerEvents="auto">
+          <SplashScreen onFinish={() => setShowSplash(false)} />
+        </View>
+      ) : null}
       <StatusBar style="auto" />
     </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  splashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+  },
+});
