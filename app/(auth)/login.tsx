@@ -5,6 +5,7 @@ import { Link, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Dimensions,
   Image,
   Keyboard,
   Platform,
@@ -470,8 +471,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   logoImage: {
-    width: 200,
-    height: 75,
+    width: Dimensions.get('window').width * 0.8,
+    height: 150,
     alignSelf: 'center',
     marginBottom: 28,
   },

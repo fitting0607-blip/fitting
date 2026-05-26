@@ -1,32 +1,26 @@
-import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Dimensions, Image, StyleSheet, View } from 'react-native';
 
 const SPLASH_DURATION_MS = 1750;
-const LOGO_ASPECT_RATIO = 200 / 75;
 
 type SplashScreenProps = {
   onFinish?: () => void;
 };
 
 export default function SplashScreen({ onFinish }: SplashScreenProps) {
-  const router = useRouter();
-  const logoWidth = Dimensions.get('window').width * 0.9;
-
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace('/login');
       onFinish?.();
     }, SPLASH_DURATION_MS);
 
     return () => clearTimeout(timer);
-  }, [router, onFinish]);
+  }, [onFinish]);
 
   return (
     <View style={styles.container}>
       <Image
         source={require('../assets/images/logo.png')}
-        style={[styles.logoImage, { width: logoWidth, aspectRatio: LOGO_ASPECT_RATIO }]}
+        style={styles.logoImage}
         resizeMode="contain"
       />
     </View>
@@ -41,6 +35,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoImage: {
-    height: undefined,
+    width: Dimensions.get('window').width * 0.8,
+    height: 200,
   },
 });
