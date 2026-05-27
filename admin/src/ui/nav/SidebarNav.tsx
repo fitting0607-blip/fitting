@@ -17,6 +17,7 @@ const items: NavItem[] = [
   { kind: 'link', to: '/reports', label: '신고목록' },
   { kind: 'link', to: '/gatherings', label: '소모임 관리' },
   { kind: 'link', to: '/gathering-applications', label: '소모임 신청' },
+  { kind: 'link', to: '/ugc-events', label: '이벤트 관리' },
 
   { kind: 'section', label: '결제 관리' },
   { kind: 'link', to: '/payments', label: '결제 정보 관리' },

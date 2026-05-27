@@ -60,6 +60,7 @@ export default function RewardScreen() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [exchangeBusy, setExchangeBusy] = useState(false);
   const [gatheringStatus, setGatheringStatus] = useState<string | null>(null);
+  const [eventSubmitted, setEventSubmitted] = useState(false);
 
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
@@ -233,6 +234,7 @@ export default function RewardScreen() {
         setAdWatchToday(0);
         setInviteCount(0);
         setGatheringStatus(null);
+        setEventSubmitted(false);
         return;
       }
 
@@ -301,6 +303,14 @@ export default function RewardScreen() {
         .eq('inviter_id', user.id);
       if (invErr) throw invErr;
       setInviteCount(invCount ?? 0);
+
+      const { data: entry, error: entryErr } = await supabase
+        .from('ugc_event_entries')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (entryErr) throw entryErr;
+      setEventSubmitted(!!(entry as { id?: string } | null)?.id);
     } catch (e: any) {
       Alert.alert('불러오기 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
       setPoints(null);
@@ -322,6 +332,11 @@ export default function RewardScreen() {
 
   const goToGathering = useCallback(() => {
     router.push('/gathering');
+  }, [router]);
+
+  const goToUgcEvent = useCallback(() => {
+    // Expo Router typed routes may not pick up new route immediately in typecheck.
+    router.push('/ugc-event' as any);
   }, [router]);
 
   const onExchangeTicket = useCallback(async () => {
@@ -767,6 +782,66 @@ export default function RewardScreen() {
             </View>
           </View>
 
+          <Text style={styles.sectionLabel}>이벤트</Text>
+
+          <View style={styles.card}>
+            <View style={styles.cardRow}>
+              <View style={styles.cardIconWrap}>
+                <Feather name="award" size={22} color={MAIN} />
+              </View>
+              <View style={styles.cardTextCol}>
+                <Text style={styles.cardTitle}>핏팅 챌린지</Text>
+                <Text style={styles.cardDesc}>핏팅 앱을 소개하는 영상을 올리고 상금을 받아보세요!</Text>
+                {eventSubmitted ? (
+                  <View style={styles.statusPill} accessibilityLabel="이벤트 참여 상태: 이미 참여했습니다">
+                    <Text style={styles.statusPillText}>이미 참여했습니다</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            <Pressable
+              onPress={goToUgcEvent}
+              disabled={eventSubmitted}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                eventSubmitted && styles.btnDisabled,
+                pressed && !eventSubmitted && styles.primaryBtnPressed,
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>
+                {eventSubmitted ? '참여 완료' : '이벤트 참여하기'}
+              </Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.sectionLabel}>소모임</Text>
+
+          <View style={styles.card}>
+            <View style={styles.cardRow}>
+              <View style={styles.cardIconWrap}>
+                <Feather name="users" size={22} color={MAIN} />
+              </View>
+              <View style={styles.cardTextCol}>
+                <Text style={styles.cardTitle}>소모임</Text>
+                <Text style={styles.cardDesc}>오프라인으로 만나는 핏팅 멤버들. 신청하고 함께해요</Text>
+                {gatheringStatusText ? (
+                  <View style={styles.statusPill} accessibilityLabel={`소모임 신청 상태: ${gatheringStatusText}`}>
+                    <Text style={styles.statusPillText}>{gatheringStatusText}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            <Pressable
+              onPress={goToGathering}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                pressed && styles.primaryBtnPressed,
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>소모임 신청하기</Text>
+            </Pressable>
+          </View>
+
           <Text style={styles.sectionLabel}>상점</Text>
 
           <View style={styles.card}>
@@ -807,34 +882,6 @@ export default function RewardScreen() {
                   {exchangeDisabled ? '포인트 부족 (50p 필요)' : '50p로 매칭권 1개 교환'}
                 </Text>
               )}
-            </Pressable>
-          </View>
-
-          <Text style={styles.sectionLabel}>소모임</Text>
-
-          <View style={styles.card}>
-            <View style={styles.cardRow}>
-              <View style={styles.cardIconWrap}>
-                <Feather name="users" size={22} color={MAIN} />
-              </View>
-              <View style={styles.cardTextCol}>
-                <Text style={styles.cardTitle}>소모임</Text>
-                <Text style={styles.cardDesc}>오프라인으로 만나는 핏팅 멤버들. 신청하고 함께해요</Text>
-                {gatheringStatusText ? (
-                  <View style={styles.statusPill} accessibilityLabel={`소모임 신청 상태: ${gatheringStatusText}`}>
-                    <Text style={styles.statusPillText}>{gatheringStatusText}</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-            <Pressable
-              onPress={goToGathering}
-              style={({ pressed }) => [
-                styles.primaryBtn,
-                pressed && styles.primaryBtnPressed,
-              ]}
-            >
-              <Text style={styles.primaryBtnText}>소모임 신청하기</Text>
             </Pressable>
           </View>
 

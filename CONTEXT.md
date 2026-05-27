@@ -430,6 +430,11 @@
 - purchaseErrorListener return 누락 버그 수정
 - Supabase publishable key 적용, eas.json env 추가
 - 소모임 승인 시 푸시알림 실패해도 승인 완료되도록 수정
+- 핏팅 챌린지 UGC 이벤트 기능 추가
+  - ugc_event_entries 테이블 생성 (RLS: 본인 제출/조회, 관리자 전체 조회/수정/삭제)
+  - 리워드탭 섹션 순서: 이벤트 → 소모임 → 상점
+  - 이벤트 참여 화면 추가 (app/ugc-event.tsx): 인스타/틱톡 ID 입력, 게시글 1개 이상 확인, 중복 참여 방지, 상금 안내, 공식 인스타 링크
+  - 관리자 페이지 이벤트 관리 메뉴 추가 (admin/src/pages/UgcEventsPage.tsx): 목록 조회, 승인/거절, 삭제, 보상 지급 관리, 관리자 메모, 탭 구성(전체/승인됨/거절됨)
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
@@ -460,6 +465,7 @@
 - public.banners (id, title, image_url, click_url, is_active, created_at)
 - public.terms (id, type, content, updated_at)
 - public.payments (id, user_id, product_id, product_title, amount, status, created_at)
+- public.ugc_event_entries (id, user_id, instagram_id, tiktok_id, status, admin_note, reward_paid, created_at)
 
 ### DB 변경
 - users 테이블 is_admin 컬럼 추가 (boolean, default false)
@@ -481,6 +487,7 @@
 - banners RLS 정책 추가 (전체 조회, 관리자만 CUD)
 - terms RLS 정책 추가 (전체 조회, 관리자만 INSERT/UPDATE)
 - payments RLS 정책 추가 (관리자 전체 조회, 유저 본인 조회)
+- ugc_event_entries RLS 정책 추가 (본인 제출/조회, 관리자 전체 조회/수정/삭제)
 
 ### Realtime 활성화
 - messages, notifications
@@ -503,7 +510,9 @@
 - app/trainer-detail.tsx
 - app/trainer-apply.tsx
 - app/(tabs)/chat.tsx
-- app/(tabs)/reward.tsx
+- app/(tabs)/reward.tsx (이벤트/소모임/상점/미션)
+- app/ugc-event.tsx (핏팅 챌린지 이벤트 참여)
+- app/gathering.tsx (소모임 상세/신청)
 - app/store.tsx (상점)
 - app/(tabs)/my.tsx
 - app/settings.tsx

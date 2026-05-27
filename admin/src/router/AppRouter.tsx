@@ -14,6 +14,7 @@ import { TermsPage } from '../views/TermsPage'
 import { PaymentsPage } from '../views/PaymentsPage'
 import { GatheringApplicationsPage } from '../views/GatheringApplicationsPage'
 import { GatheringsPage } from '../pages/Gatherings'
+import { UgcEventsPage } from '../pages/UgcEventsPage'
 
 export function AppRouter() {
   return (
@@ -40,6 +41,7 @@ export function AppRouter() {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/payments" element={<PaymentsPage />} />
             <Route path="/gatherings" element={<GatheringsPage />} />
+            <Route path="/ugc-events" element={<UgcEventsPage />} />
             <Route
               path="/gathering-applications"
               element={<GatheringApplicationsPage />}
