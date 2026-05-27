@@ -216,8 +216,16 @@ export default function UgcEventScreen() {
                   <Text style={styles.prizeSubLine}>· 좋아요 500 이상: 500P</Text>
                 </View>
 
-                <Text style={styles.instagramDetailNotice}>
-                  자세한 이벤트 내용은 핏팅 공식 인스타그램{' '}
+                <View style={styles.conditionsBox}>
+                  <Text style={styles.conditionsTitle}>참여 조건</Text>
+                  <Text style={styles.conditionLine}>• 게시글 1개 이상 등록</Text>
+                  <Text style={styles.conditionLine}>• #핏팅 #핏팅챌린지 포함</Text>
+                  <Text style={styles.conditionLine}>• 공식 계정 태그</Text>
+                  <Text style={styles.conditionLine}>• 이벤트 종료일까지 영상 공개 유지</Text>
+                </View>
+
+                <Text style={styles.instagramFooterNotice}>
+                  자세한 내용은 공식 인스타그램{' '}
                   <Text
                     style={styles.officialTagLink}
                     onPress={() => void openOfficialInstagram()}
@@ -226,7 +234,7 @@ export default function UgcEventScreen() {
                   >
                     @fitting_official.kr
                   </Text>
-                  에서 확인하세요.
+                  을 참고하세요.
                 </Text>
 
                 {alreadySubmitted ? (
@@ -235,18 +243,6 @@ export default function UgcEventScreen() {
                     <Text style={styles.submittedDesc}>제출한 ID는 수정할 수 없어요.</Text>
                   </View>
                 ) : null}
-
-                <Text style={styles.officialTagNotice}>
-                  영상 업로드 시 핏팅 공식 인스타 계정{' '}
-                  <Text
-                    style={styles.officialTagLink}
-                    onPress={() => void openOfficialInstagram()}
-                    accessibilityRole="link"
-                  >
-                    @fitting_official.kr
-                  </Text>
-                  을 태그해 주세요.
-                </Text>
 
                 <Text style={styles.inputLabel}>인스타그램 ID (선택)</Text>
                 <TextInput
@@ -291,12 +287,6 @@ export default function UgcEventScreen() {
                     </Text>
                   )}
                 </Pressable>
-
-                {!alreadySubmitted ? (
-                  <Text style={styles.helpText}>
-                    인스타그램 ID 또는 틱톡 ID 중 하나 이상 입력해야 제출할 수 있어요.
-                  </Text>
-                ) : null}
               </View>
             </View>
           )}
@@ -400,7 +390,26 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingLeft: 8,
   },
-  instagramDetailNotice: {
+  conditionsBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+    marginBottom: 12,
+  },
+  conditionsTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#111111',
+    marginBottom: 6,
+  },
+  conditionLine: {
+    fontSize: 12,
+    color: '#374151',
+    lineHeight: 18,
+  },
+  instagramFooterNotice: {
     fontSize: 12,
     color: '#6B7280',
     lineHeight: 18,
@@ -429,12 +438,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#6B7280',
-  },
-  officialTagNotice: {
-    fontSize: 13,
-    color: '#374151',
-    lineHeight: 18,
-    marginBottom: 4,
   },
   inputLabel: {
     fontSize: 12,
@@ -476,12 +479,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  helpText: {
-    marginTop: 12,
-    fontSize: 12,
-    color: '#6B7280',
-    lineHeight: 16,
   },
 });
 
