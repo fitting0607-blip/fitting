@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "fitting",
+    "name": "핏팅",
     "slug": "fitting",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -17,6 +17,7 @@
       }
     },
     "android": {
+      "package": "com.hywoo.fitting",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
