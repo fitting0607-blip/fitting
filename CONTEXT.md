@@ -202,6 +202,9 @@
 - 상점 화면 (홈 상단 버튼, 리워드 탭 매칭권 구매 버튼으로 진입)
 - 상점 피티권 탭 추가 (승인된 트레이너만 구매 가능)
 - 상점 상품 카드 원가 취소선 + 할인가 + 할인율 뱃지 표시
+- 매칭권 아이콘 이미지 교체 (matching-ticket.png 적용)
+  - 홈 피드 매칭 버튼: dumbbell 아이콘 → matching-ticket.png (42x42), 배경색 제거
+  - 상점 매칭권 상품 행: 이모지 → matching-ticket.png (48x48)
 - iOS 인앱결제(IAP) 구현 완료
   - expo-in-app-purchases 연동
   - App Store Connect 상품 등록 완료 (매칭권 6개, 트레이너 등록 1개)

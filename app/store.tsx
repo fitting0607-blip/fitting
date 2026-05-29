@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -813,9 +814,18 @@ export default function StoreScreen() {
               <RowWrap key={item.id} {...(wrapProps as any)}>
               <View style={styles.rowLeft}>
                 <View style={styles.iconWrap}>
-                  <Text style={styles.dumbbellIcon} accessibilityLabel="매칭권">
-                    🏋️
-                  </Text>
+                  {tab === 'matching' ? (
+                    <Image
+                      source={require('../assets/images/matching-ticket.png')}
+                      style={styles.matchingTicketIcon}
+                      resizeMode="contain"
+                      accessibilityLabel="매칭권"
+                    />
+                  ) : (
+                    <Text style={styles.dumbbellIcon} accessibilityLabel="피티권">
+                      🏋️
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.rowBody}>
                   <View style={styles.rowTitleLine}>
@@ -1045,6 +1055,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(108, 71, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  matchingTicketIcon: {
+    width: 48,
+    height: 48,
   },
   dumbbellIcon: {
     fontSize: 20,

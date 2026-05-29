@@ -528,7 +528,12 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="매칭권 사용"
                 >
-                  <MaterialCommunityIcons name="dumbbell" size={24} color="#FFFFFF" />
+                  <Image
+                    source={require('../../assets/images/matching-ticket.png')}
+                    style={styles.matchTicketIcon}
+                    resizeMode="contain"
+                    accessibilityLabel="매칭권"
+                  />
                 </Pressable>
 
                 <Pressable
@@ -953,10 +958,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: MAIN,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 5,
+  },
+  matchTicketIcon: {
+    width: 42,
+    height: 42,
   },
   heartBtn: {
     position: 'absolute',
