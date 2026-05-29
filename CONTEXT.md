@@ -435,10 +435,22 @@
   - 리워드탭 섹션 순서: 이벤트 → 소모임 → 상점
   - 이벤트 참여 화면 추가 (app/ugc-event.tsx): 인스타/틱톡 ID 입력, 게시글 1개 이상 확인, 중복 참여 방지, 상금 안내, 공식 인스타 링크
   - 관리자 페이지 이벤트 관리 메뉴 추가 (admin/src/pages/UgcEventsPage.tsx): 목록 조회, 승인/거절, 삭제, 보상 지급 관리, 관리자 메모, 탭 구성(전체/승인됨/거절됨)
+- 소모임 IAP 결제 안정성 개선
+  - 결제 성공 후 상점 소모임 UI 즉시 갱신
+  - 소모임 참가비 결제 완료 문구 분기
+  - 결제 완료 Alert를 브랜드 컬러 Modal 기반 Alert로 변경
+  - pendingGatheringApplicationId를 AsyncStorage에 저장해 앱 재시작/백그라운드 kill 후 pending 구매 재처리 대응
+  - grant 성공 또는 duplicate 처리 완료 시 pending 값 정리
+  - grant 실패 시 pending 유지로 재시도 가능
+  - 변경 파일: iap/rniap.ts, iap/purchaseCompleteAlert.tsx, app/store.tsx, app/_layout.tsx
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
 - 홈 피드 카드 오른쪽 이미지 살짝 잘림 (추후 수정 필요)
+
+## 주의사항
+- 소모임 IAP는 Supabase products 테이블에 com.hywoo.fitting.gathering_fee 행이 있어야 grant 가능
+- App Store Connect에도 com.hywoo.fitting.gathering_fee 상품 등록 필요
 
 ## 추후 작업
 - SMS 인증 로직 추가
@@ -521,6 +533,7 @@
 - app/post-create.tsx
 - app/post-detail.tsx
 - app/user-profile.tsx
+- iap/rniap.ts, iap/grant.ts, iap/productIds.ts, iap/purchaseCompleteAlert.tsx
 - app/matching.ts
 - app/hooks/useMatchModal.tsx
 - app/hooks/usePostLike.tsx

@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { attachNotificationResponseHandler, ensureExpoNotificationHandlerInstalled, registerAndSavePushToken } from '@/app/utils/push';
+import { PurchaseCompleteAlertHost } from '@/iap/purchaseCompleteAlert';
 import {
   initConnection as initRniapConnection,
   startListeners as startRniapListeners,
@@ -156,6 +157,7 @@ export default function RootLayout() {
         </View>
       ) : null}
       <StatusBar style="auto" />
+      <PurchaseCompleteAlertHost />
     </ThemeProvider>
     </GestureHandlerRootView>
   );

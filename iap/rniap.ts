@@ -1,9 +1,14 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { AppOwnership } from 'expo-constants';
 import { Alert, Platform } from 'react-native';
 
 import { supabase } from '@/supabase';
 import { grantAppleIapAndRecord } from '@/iap/grant';
+import { showPurchaseCompleteAlert } from '@/iap/purchaseCompleteAlert';
 import { APPLE_PRODUCT_IDS } from '@/iap/productIds';
+
+const GATHERING_FEE_PRODUCT_ID = 'com.hywoo.fitting.gathering_fee';
+const PENDING_GATHERING_APP_ID_STORAGE_KEY = 'fitting.iap.pendingGatheringApplicationId';
 
 /** Store / listeners pass purchase objects shaped by react-native-iap — no static import of its types. */
 export type IapPurchase = Record<string, unknown>;
@@ -59,8 +64,68 @@ let connectingPromise: Promise<boolean> | null = null;
 const processedTransactionIds = new Set<string>();
 const inflightTransactionIds = new Set<string>();
 
-/** Gathering fee purchase needs application context to mark paid. */
+/** Gathering fee purchase needs application context to mark paid (memory + AsyncStorage). */
 let pendingGatheringApplicationId: string | null = null;
+let pendingGatheringStorageHydrated = false;
+let pendingGatheringStorageHydratePromise: Promise<void> | null = null;
+
+async function hydratePendingGatheringApplicationIdFromStorage(): Promise<void> {
+  if (pendingGatheringStorageHydrated) return;
+  if (pendingGatheringStorageHydratePromise) return pendingGatheringStorageHydratePromise;
+
+  pendingGatheringStorageHydratePromise = (async () => {
+    try {
+      const stored = await AsyncStorage.getItem(PENDING_GATHERING_APP_ID_STORAGE_KEY);
+      const trimmed = String(stored ?? '').trim();
+      if (trimmed && !pendingGatheringApplicationId) {
+        pendingGatheringApplicationId = trimmed;
+      }
+    } catch (e) {
+      console.warn('[RNIAP] hydrate pending gathering application id failed', e);
+    } finally {
+      pendingGatheringStorageHydrated = true;
+      pendingGatheringStorageHydratePromise = null;
+    }
+  })();
+
+  return pendingGatheringStorageHydratePromise;
+}
+
+async function persistPendingGatheringApplicationId(id: string | null): Promise<void> {
+  try {
+    if (id) {
+      await AsyncStorage.setItem(PENDING_GATHERING_APP_ID_STORAGE_KEY, id);
+    } else {
+      await AsyncStorage.removeItem(PENDING_GATHERING_APP_ID_STORAGE_KEY);
+    }
+  } catch (e) {
+    console.warn('[RNIAP] persist pending gathering application id failed', e);
+  }
+}
+
+async function clearPendingGatheringApplicationId(): Promise<void> {
+  pendingGatheringApplicationId = null;
+  await persistPendingGatheringApplicationId(null);
+}
+
+async function resolvePendingGatheringApplicationIdForGrant(productId: string): Promise<string | null> {
+  if (productId !== GATHERING_FEE_PRODUCT_ID) return null;
+  await hydratePendingGatheringApplicationIdFromStorage();
+  const trimmed = String(pendingGatheringApplicationId ?? '').trim();
+  return trimmed || null;
+}
+
+function getIapPurchaseCompleteMessage(productId: string): string {
+  if (productId === 'com.hywoo.fitting.trainer_30') return '피티권 지급 완료';
+  if (productId === GATHERING_FEE_PRODUCT_ID) return '소모임 참가비 결제 완료';
+  return '매칭권 지급 완료';
+}
+
+function shouldClearPendingGatheringAfterGrant(productId: string, grantOk: boolean, grantKind?: string): boolean {
+  if (productId !== GATHERING_FEE_PRODUCT_ID) return false;
+  if (!grantOk) return false;
+  return grantKind === 'gathering_fee' || grantKind === 'duplicate';
+}
 
 /** purchaseErrorListener에 productId가 없을 때 store purchasingSku 해제용 */
 let lastRequestPurchaseSku: string | null = null;
@@ -96,6 +161,7 @@ export function subscribeIapPurchaseFlowChange(cb: IapPurchaseFlowListener): () 
 export function setPendingGatheringApplicationId(id: string | null): void {
   const trimmed = String(id ?? '').trim();
   pendingGatheringApplicationId = trimmed || null;
+  void persistPendingGatheringApplicationId(pendingGatheringApplicationId);
 }
 
 /** store.tsx 등에서 purchasingSku 해제 — listener는 rniap에만 있으므로 여기서 UI 동기화 */
@@ -220,14 +286,16 @@ async function processPurchaseLikeListener(purchase: IapPurchase, source: string
     return { status: 'no_session', transactionId, productId };
   }
 
+  const gatheringApplicationId = await resolvePendingGatheringApplicationIdForGrant(productId);
+
   const grantRes = await grantAppleIapAndRecord({
     userId: user.id,
     productId,
     transactionId,
     productRow: null,
     context:
-      productId === 'com.hywoo.fitting.gathering_fee'
-        ? { gatheringApplicationId: pendingGatheringApplicationId }
+      productId === GATHERING_FEE_PRODUCT_ID
+        ? { gatheringApplicationId }
         : undefined,
   });
 
@@ -241,6 +309,10 @@ async function processPurchaseLikeListener(purchase: IapPurchase, source: string
         source,
         message: grantRes.message,
       });
+
+      if (shouldClearPendingGatheringAfterGrant(productId, true, 'duplicate')) {
+        await clearPendingGatheringApplicationId();
+      }
 
       try {
         await finishTransaction(purchase, productId);
@@ -265,6 +337,10 @@ async function processPurchaseLikeListener(purchase: IapPurchase, source: string
     return { status: 'grant_failed', transactionId, productId, message, kind };
   }
 
+  if (shouldClearPendingGatheringAfterGrant(productId, true, grantRes.kind)) {
+    await clearPendingGatheringApplicationId();
+  }
+
   emitIapGrantSuccessRefetch();
 
   // DB 지급 성공 후에만 finishTransaction
@@ -280,8 +356,7 @@ async function processPurchaseLikeListener(purchase: IapPurchase, source: string
 
   if (!alertedTransactionIds.has(transactionId)) {
     alertedTransactionIds.add(transactionId);
-    const doneMsg = productId === 'com.hywoo.fitting.trainer_30' ? '피티권 지급 완료' : '매칭권 지급 완료';
-    Alert.alert('결제 완료', doneMsg);
+    showPurchaseCompleteAlert('결제 완료', getIapPurchaseCompleteMessage(productId));
   }
 
   emitPurchaseUiIdle(productId);
@@ -306,6 +381,8 @@ export async function initConnection(): Promise<boolean> {
       billingReady = Boolean(ok);
       if (!billingReady) {
         console.warn('[RNIAP] initConnection native returned false');
+      } else {
+        void hydratePendingGatheringApplicationIdFromStorage();
       }
       return billingReady;
     } catch (e) {
@@ -592,6 +669,7 @@ export function startListeners(): void {
       return;
     }
     try {
+      void hydratePendingGatheringApplicationIdFromStorage();
       purchaseUpdatedSub = iap.purchaseUpdatedListener(async (purchase: unknown) => {
         let transactionId = '';
         let productId = '';

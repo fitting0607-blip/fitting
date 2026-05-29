@@ -168,14 +168,6 @@ export default function StoreScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    return subscribeIapGrantSuccess(() => {
-      clearPurchasingWatchdog();
-      setPurchasingSku(null);
-      void load({ silent: true });
-    });
-  }, [load, clearPurchasingWatchdog]);
-
   const loadProducts = useCallback(async (category: 'ticket' | 'matching_ticket' | 'pt_ticket') => {
     setProductsLoading(true);
     try {
@@ -416,6 +408,15 @@ export default function StoreScreen() {
       setMyGatheringLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    return subscribeIapGrantSuccess(() => {
+      clearPurchasingWatchdog();
+      setPurchasingSku(null);
+      void load({ silent: true });
+      void loadMyGathering();
+    });
+  }, [load, loadMyGathering, clearPurchasingWatchdog]);
 
   useFocusEffect(
     useCallback(() => {
