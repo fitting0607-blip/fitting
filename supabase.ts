@@ -1,5 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { createClient } from '@supabase/supabase-js';
+import { AppState, Platform } from 'react-native';
 
 type AppExtra = Record<string, unknown> & {
   EXPO_PUBLIC_SUPABASE_URL?: string;
@@ -35,4 +37,26 @@ if (!supabaseEnv) {
 export const supabase = createClient(
   supabaseEnv?.url ?? 'https://invalid.supabase.co',
   supabaseEnv?.anonKey ?? 'invalid-anon-key',
+  {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  },
 );
+
+// Pause token refresh timers in background; resume on foreground (React Native).
+if (Platform.OS !== 'web') {
+  const syncAutoRefresh = (state: string) => {
+    if (state === 'active') {
+      void supabase.auth.startAutoRefresh();
+    } else {
+      void supabase.auth.stopAutoRefresh();
+    }
+  };
+
+  syncAutoRefresh(AppState.currentState);
+  AppState.addEventListener('change', syncAutoRefresh);
+}

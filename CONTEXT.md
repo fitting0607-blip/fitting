@@ -448,6 +448,14 @@
   - onBuyMatchingTicket에서 무제한 SKU 방어 처리 추가
   - 월정액 구독 방식으로 추후 별도 구현 예정
   - 변경 파일: app/store.tsx
+- Supabase 세션 영속화 및 자동 갱신 처리
+  - AsyncStorage를 auth storage로 연결 (persistSession, autoRefreshToken)
+  - AppState로 포그라운드/백그라운드 전환 시 startAutoRefresh / stopAutoRefresh 제어
+  - 앱 시작 및 포그라운드 복귀 시 세션 복구 로직 추가
+  - 세션 만료 임박 시 refresh_token으로 자동 갱신
+  - 갱신 실패 시에만 로그인 화면으로 이동
+  - 기존 로그인/로그아웃/탈퇴 흐름 유지
+  - 변경 파일: supabase.ts, lib/supabaseSession.ts, app/_layout.tsx
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
@@ -456,6 +464,7 @@
 ## 주의사항
 - 소모임 IAP는 Supabase products 테이블에 com.hywoo.fitting.gathering_fee 행이 있어야 grant 가능
 - App Store Connect에도 com.hywoo.fitting.gathering_fee 상품 등록 필요
+- 이번 수정 이전에 로그인한 사용자는 AsyncStorage에 세션이 없어 한 번 재로그인 필요
 
 ## 추후 작업
 - SMS 인증 로직 추가

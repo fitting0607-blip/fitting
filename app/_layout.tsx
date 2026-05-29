@@ -2,9 +2,9 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { Stack, useRouter, useSegments } from 'expo-router';
 import Constants, { AppOwnership } from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Platform, StyleSheet, View } from 'react-native';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -18,6 +18,7 @@ import {
   isIapPurchaseFlowActive,
   subscribeIapPurchaseFlowChange,
 } from '@/iap/rniap';
+import { recoverSupabaseSession } from '@/lib/supabaseSession';
 import { supabase } from '../supabase';
 import SplashScreen from './splash';
 
@@ -31,8 +32,10 @@ export default function RootLayout() {
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [sessionRecovering, setSessionRecovering] = useState(false);
   const [iapFlowRevision, setIapFlowRevision] = useState(0);
   const [showSplash, setShowSplash] = useState(true);
+  const sessionRecoveringRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -65,20 +68,27 @@ export default function RootLayout() {
       // best-effort: never crash app on startup
     }
 
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
+    void (async () => {
+      sessionRecoveringRef.current = true;
+      setSessionRecovering(true);
+      try {
+        const ok = await recoverSupabaseSession();
         if (!mounted) return;
-        setHasSession(Boolean(data.session));
-        setIsReady(true);
-      })
-      .catch(() => {
+        setHasSession(ok);
+      } catch {
         if (!mounted) return;
         setHasSession(false);
-        setIsReady(true);
-      });
+      } finally {
+        sessionRecoveringRef.current = false;
+        if (mounted) {
+          setSessionRecovering(false);
+          setIsReady(true);
+        }
+      }
+    })();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (sessionRecoveringRef.current && !session) return;
       setHasSession(Boolean(session));
     });
 
@@ -105,7 +115,32 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!isReady) return;
+
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') return;
+
+      sessionRecoveringRef.current = true;
+      setSessionRecovering(true);
+      void recoverSupabaseSession()
+        .then((ok) => {
+          setHasSession(ok);
+        })
+        .catch(() => {
+          setHasSession(false);
+        })
+        .finally(() => {
+          sessionRecoveringRef.current = false;
+          setSessionRecovering(false);
+        });
+    });
+
+    return () => sub.remove();
+  }, [isReady]);
+
+  useEffect(() => {
+    if (!isReady) return;
     if (showSplash) return;
+    if (sessionRecovering) return;
     if (hasSession) return;
     if (isIapPurchaseFlowActive()) return;
 
@@ -115,7 +150,7 @@ export default function RootLayout() {
     if (onAuthScreen) return;
 
     router.replace('/login');
-  }, [isReady, showSplash, hasSession, segments, router, iapFlowRevision]);
+  }, [isReady, showSplash, sessionRecovering, hasSession, segments, router, iapFlowRevision]);
 
   useEffect(() => {
     // handle notification taps
