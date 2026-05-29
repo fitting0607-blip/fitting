@@ -883,8 +883,10 @@ const styles = StyleSheet.create({
     color: '#111111',
   },
   headerLogo: {
-    width: 130,
-    height: 47,
+    width: 170,
+    height: 60,
+    marginTop: -6.5,
+    marginBottom: -6.5,
   },
 
   feedBar: {

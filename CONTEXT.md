@@ -19,6 +19,8 @@
   - index.tsx: 헤더 좌우 width:60 고정, 로고 중앙 배치
   - 로고 크기 130×47로 확대
   - login.tsx: 로고 크기 200×75로 확대
+- 홈 탭 헤더 로고 크기 확대 (width: 170, height: 60, 레이아웃 유지)
+  - index.tsx: headerLogo 170×60, marginTop/marginBottom -6.5로 헤더·피드 위치 유지
 - 스플래시 스크린 추가 (app/splash.tsx): 흰 배경 + 핏팅 로고 중앙, 1.75초 후 로그인 화면으로 자동 이동
 - 카카오 로그인 (Supabase kakao provider 연동, 리다이렉트 URI 설정 완료)
 - 카카오 로그인 redirectTo URL 수정
