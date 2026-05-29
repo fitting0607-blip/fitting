@@ -21,7 +21,7 @@ export type GrantPurchaseInput = {
 };
 
 export type GrantPurchaseResult =
-  | { ok: true; kind: 'matching_ticket' | 'pt_ticket' | 'gathering_fee' | 'premium_skipped'; grantedTickets?: number; grantedPoints?: number }
+  | { ok: true; kind: 'matching_ticket' | 'pt_ticket' | 'gathering_fee'; grantedTickets?: number; grantedPoints?: number }
   | { ok: false; kind: 'duplicate' | 'unknown_product' | 'not_eligible' | 'db_error'; message: string };
 
 async function insertPayment(payload: {
@@ -82,11 +82,6 @@ export async function grantAppleIapAndRecord(input: GrantPurchaseInput): Promise
   if (!productId) return { ok: false, kind: 'unknown_product', message: 'missing productId' };
   if (!isKnownAppleProductId(productId)) {
     return { ok: false, kind: 'unknown_product', message: `unknown productId: ${productId}` };
-  }
-
-  // premium는 아직 지급 로직 미구현: DB 기록 없이 스킵하는 대신, 실패/성공 정책을 상위에서 결정하게 한다.
-  if (productId === 'com.hywoo.fitting.ticket_unlimited') {
-    return { ok: true, kind: 'premium_skipped' };
   }
 
   try {

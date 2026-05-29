@@ -597,9 +597,6 @@ export async function requestPurchase(productId: string): Promise<void> {
   }
   const sku = String(productId ?? '').trim();
   if (!sku) throw new Error('missing productId');
-  if (sku === 'com.hywoo.fitting.ticket_unlimited') {
-    throw new Error('프리미엄 상품은 준비 중입니다.');
-  }
 
   const ok = await initConnection();
   if (!ok) {
@@ -840,9 +837,5 @@ function hashShort(input: string): string {
 }
 
 function getAllAppleProductIds(): readonly string[] {
-  return [
-    ...APPLE_PRODUCT_IDS.matchingTickets,
-    ...APPLE_PRODUCT_IDS.ptTickets,
-    ...APPLE_PRODUCT_IDS.premium,
-  ];
+  return [...APPLE_PRODUCT_IDS.matchingTickets, ...APPLE_PRODUCT_IDS.ptTickets];
 }

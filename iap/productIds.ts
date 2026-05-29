@@ -5,17 +5,16 @@ export const APPLE_PRODUCT_IDS = {
     'com.hywoo.fitting.ticket_10',
     'com.hywoo.fitting.ticket_30',
     'com.hywoo.fitting.ticket_50',
+    'com.hywoo.fitting.ticket_unlimited',
   ] as const,
   ptTickets: ['com.hywoo.fitting.trainer_30'] as const,
   gatheringFees: ['com.hywoo.fitting.gathering_fee'] as const,
-  premium: ['com.hywoo.fitting.ticket_unlimited'] as const,
 } as const;
 
 export type AppleProductId =
   | (typeof APPLE_PRODUCT_IDS.matchingTickets)[number]
   | (typeof APPLE_PRODUCT_IDS.ptTickets)[number]
-  | (typeof APPLE_PRODUCT_IDS.gatheringFees)[number]
-  | (typeof APPLE_PRODUCT_IDS.premium)[number];
+  | (typeof APPLE_PRODUCT_IDS.gatheringFees)[number];
 
 export const TICKET_QTY_BY_PRODUCT_ID: Record<string, number> = {
   'com.hywoo.fitting.ticket_3': 3,
@@ -31,7 +30,6 @@ export function isKnownAppleProductId(productId: string): boolean {
   if (id in TICKET_QTY_BY_PRODUCT_ID) return true;
   if (APPLE_PRODUCT_IDS.ptTickets.includes(id as any)) return true;
   if (APPLE_PRODUCT_IDS.gatheringFees.includes(id as any)) return true;
-  if (APPLE_PRODUCT_IDS.premium.includes(id as any)) return true;
   return false;
 }
 

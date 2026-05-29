@@ -27,6 +27,11 @@ import {
 
 const MAIN = '#6C47FF';
 const GATHERING_FEE_PRODUCT_ID = 'com.hywoo.fitting.gathering_fee';
+const UNLIMITED_MATCHING_TICKET_SKU = 'com.hywoo.fitting.ticket_unlimited';
+
+function isUnlimitedMatchingTicketBlocked(item: StoreItem): boolean {
+  return item.apple_product_id?.trim() === UNLIMITED_MATCHING_TICKET_SKU;
+}
 
 function purchaseAlertMessage(e: unknown): string {
   const msg = String((e as { message?: string })?.message ?? '').trim();
@@ -464,6 +469,9 @@ export default function StoreScreen() {
         Alert.alert('구매 불가', '상품 정보가 올바르지 않습니다.');
         return;
       }
+      if (isUnlimitedMatchingTicketBlocked(item)) {
+        return;
+      }
       if (purchasingSku) {
         Alert.alert('안내', '결제 처리 중입니다. 잠시 후 다시 시도해주세요.');
         return;
@@ -472,12 +480,6 @@ export default function StoreScreen() {
       setPurchasingSku(sku);
       startPurchasingWatchdog(sku);
       try {
-        if (sku === 'com.hywoo.fitting.ticket_unlimited') {
-          Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
-          clearPurchasingWatchdog();
-          setPurchasingSku(null);
-          return;
-        }
         console.log('[STORE] matching requestPurchase start', { sku });
         await requestPurchase(sku);
         console.log('[STORE] matching requestPurchase returned', { sku });
@@ -519,12 +521,6 @@ export default function StoreScreen() {
       setPurchasingSku(sku);
       startPurchasingWatchdog(sku);
       try {
-        if (sku === 'com.hywoo.fitting.ticket_unlimited') {
-          Alert.alert('안내', '프리미엄 상품은 준비 중입니다.');
-          clearPurchasingWatchdog();
-          setPurchasingSku(null);
-          return;
-        }
         console.log('[STORE] pt requestPurchase start', { sku });
         await requestPurchase(sku);
         console.log('[STORE] pt requestPurchase returned', { sku });
@@ -789,9 +785,11 @@ export default function StoreScreen() {
           </View>
         ) : tab !== 'gathering' ? (
           products.map((item) => {
-            const RowWrap = tab === 'pt' ? View : Pressable;
+            const unlimitedBlocked =
+              tab === 'matching' && isUnlimitedMatchingTicketBlocked(item);
+            const RowWrap = tab === 'pt' || unlimitedBlocked ? View : Pressable;
             const wrapProps =
-              tab === 'pt'
+              tab === 'pt' || unlimitedBlocked
                 ? {
                     style: styles.row,
                   }
@@ -861,12 +859,18 @@ export default function StoreScreen() {
                     </Text>
                   )}
                 </Pressable>
+              ) : unlimitedBlocked ? (
+                <View
+                  style={[styles.buyBtn, styles.buyBtnDisabled]}
+                  accessibilityRole="text"
+                  accessibilityLabel="준비 중"
+                >
+                  <Text style={[styles.buyBtnText, styles.buyBtnTextDisabled]}>준비 중</Text>
+                </View>
+              ) : purchasingSku && purchasingSku === item.apple_product_id.trim() ? (
+                <ActivityIndicator size="small" color={MAIN} />
               ) : (
-                purchasingSku && purchasingSku === item.apple_product_id.trim() ? (
-                  <ActivityIndicator size="small" color={MAIN} />
-                ) : (
-                  <Feather name="chevron-right" size={20} color="#9CA3AF" />
-                )
+                <Feather name="chevron-right" size={20} color="#9CA3AF" />
               )}
               </RowWrap>
             );

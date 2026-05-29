@@ -443,6 +443,11 @@
   - grant 성공 또는 duplicate 처리 완료 시 pending 값 정리
   - grant 실패 시 pending 유지로 재시도 가능
   - 변경 파일: iap/rniap.ts, iap/purchaseCompleteAlert.tsx, app/store.tsx, app/_layout.tsx
+- 무제한 매칭권(com.hywoo.fitting.ticket_unlimited) 구매 재차단
+  - 상점 UI에서 "준비 중" 표시로 변경
+  - onBuyMatchingTicket에서 무제한 SKU 방어 처리 추가
+  - 월정액 구독 방식으로 추후 별도 구현 예정
+  - 변경 파일: app/store.tsx
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
