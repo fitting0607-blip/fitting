@@ -3,6 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -236,6 +237,9 @@ export default function HomeScreen() {
   }, [cardHeight]);
 
   const cardWidth = pageWidth;
+  // Keep existing iOS layout (photoWidth == cardWidth in current layout).
+  const photoWidth = cardWidth;
+  const imageViewportWidth = Platform.OS === 'android' ? cardWidth : photoWidth;
 
   const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
     const list = (urls ?? []).filter(Boolean);
@@ -466,7 +470,11 @@ export default function HomeScreen() {
       const t = isImageTransformV1(tRaw) ? (tRaw as ImageTransformV1) : null;
       const renderT =
         t && cardWidth > 0 && photoHeight > 0
-          ? resolveTransformForViewport({ viewportW: cardWidth, viewportH: photoHeight, transform: t })
+          ? resolveTransformForViewport({
+              viewportW: imageViewportWidth,
+              viewportH: photoHeight,
+              transform: t,
+            })
           : null;
 
       const tagsAll: TagItem[] = [
@@ -494,9 +502,13 @@ export default function HomeScreen() {
               nestedScrollEnabled
               bounces={false}
             >
-              <View style={[styles.photoArea, { width: '100%', height: photoHeight }]}>
+              <View style={[styles.photoArea, { width: cardWidth, height: photoHeight }]}>
                 {thumb && !renderT ? (
-                  <RNImage source={{ uri: thumb }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                  <RNImage
+                    source={{ uri: thumb }}
+                    style={{ width: imageViewportWidth, height: photoHeight }}
+                    resizeMode="cover"
+                  />
                 ) : null}
                 {thumb && renderT && t ? (
                   <RNImage
@@ -936,7 +948,6 @@ const styles = StyleSheet.create({
   },
   photoArea: {
     backgroundColor: '#000000',
-    aspectRatio: 4 / 5,
     position: 'relative',
     overflow: 'hidden',
   },

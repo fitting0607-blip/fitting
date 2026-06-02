@@ -1,12 +1,27 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import type { NotificationBehavior } from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { supabase } from '@/supabase';
 
 type RoutePayload = { pathname: string; params?: Record<string, string> };
+type ExpoNotificationsModule = typeof import('expo-notifications');
+
+/** SDK 53+ Expo Go on Android: remote push removed — never require expo-notifications. */
+function shouldSkipExpoNotifications(): boolean {
+  return Platform.OS === 'android' && __DEV__;
+}
+
+function getExpoNotificationsModule(): ExpoNotificationsModule | null {
+  if (shouldSkipExpoNotifications()) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-notifications') as ExpoNotificationsModule;
+  } catch {
+    return null;
+  }
+}
 
 function readRecordString(obj: unknown, key: string): string | null {
   if (obj === null || typeof obj !== 'object') return null;
@@ -31,6 +46,9 @@ function getEasProjectId(): string | null {
 }
 
 export function ensureExpoNotificationHandlerInstalled() {
+  if (shouldSkipExpoNotifications()) return;
+  const Notifications = getExpoNotificationsModule();
+  if (!Notifications) return;
   try {
     Notifications.setNotificationHandler({
       handleNotification: async (): Promise<NotificationBehavior> => ({
@@ -47,7 +65,10 @@ export function ensureExpoNotificationHandlerInstalled() {
 }
 
 export async function registerAndSavePushToken(): Promise<string | null> {
+  if (shouldSkipExpoNotifications()) return null;
   if (!Device.isDevice) return null;
+  const Notifications = getExpoNotificationsModule();
+  if (!Notifications) return null;
 
   try {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -92,6 +113,9 @@ export async function registerAndSavePushToken(): Promise<string | null> {
 }
 
 export function attachNotificationResponseHandler(onRoute: (route: RoutePayload) => void) {
+  if (shouldSkipExpoNotifications()) return () => {};
+  const Notifications = getExpoNotificationsModule();
+  if (!Notifications) return () => {};
   try {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const dataRaw = response?.notification?.request?.content?.data;
