@@ -233,13 +233,14 @@ export default function HomeScreen() {
   }, [feedBarHeight, headerHeight, tabBarHeight, windowHeight]);
 
   const photoHeight = useMemo(() => {
-    return cardHeight > 0 ? Math.round(cardHeight * 0.72) : 0;
+    const photoHeightRatio = 0.72;
+    return cardHeight > 0 ? Math.round(cardHeight * photoHeightRatio) : 0;
   }, [cardHeight]);
 
   const cardWidth = pageWidth;
-  // Keep existing iOS layout (photoWidth == cardWidth in current layout).
-  const photoWidth = cardWidth;
-  const imageViewportWidth = Platform.OS === 'android' ? cardWidth : photoWidth;
+  const imageViewportWidth = cardWidth;
+  const imageViewportHeight =
+    Platform.OS === 'android' ? Math.round(photoHeight * 1.1) : photoHeight;
 
   const resolveImageUrls = useCallback(async (urls: string[] | null | undefined) => {
     const list = (urls ?? []).filter(Boolean);
@@ -472,7 +473,7 @@ export default function HomeScreen() {
         t && cardWidth > 0 && photoHeight > 0
           ? resolveTransformForViewport({
               viewportW: imageViewportWidth,
-              viewportH: photoHeight,
+              viewportH: imageViewportHeight,
               transform: t,
             })
           : null;
@@ -502,11 +503,11 @@ export default function HomeScreen() {
               nestedScrollEnabled
               bounces={false}
             >
-              <View style={[styles.photoArea, { width: cardWidth, height: photoHeight }]}>
+              <View style={[styles.photoArea, { width: cardWidth, height: imageViewportHeight }]}>
                 {thumb && !renderT ? (
                   <RNImage
                     source={{ uri: thumb }}
-                    style={{ width: imageViewportWidth, height: photoHeight }}
+                    style={{ width: imageViewportWidth, height: imageViewportHeight }}
                     resizeMode="cover"
                   />
                 ) : null}
