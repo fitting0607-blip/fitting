@@ -120,7 +120,7 @@ export async function grantAppleIapAndRecord(input: GrantPurchaseInput): Promise
 
       const { data: appRow, error: appErr } = await supabase
         .from('gathering_applications')
-        .select('id,status')
+        .select('id,status,gathering_id')
         .eq('id', applicationId)
         .eq('user_id', userId)
         .limit(1)
@@ -133,9 +133,24 @@ export async function grantAppleIapAndRecord(input: GrantPurchaseInput): Promise
         return { ok: false, kind: 'not_eligible', message: `invalid application status: ${curStatus || '(empty)'}` };
       }
 
+      const gatheringId = String((appRow as any)?.gathering_id ?? '').trim();
+      if (!gatheringId) {
+        return { ok: false, kind: 'not_eligible', message: 'missing gathering_id on application' };
+      }
+
+      const { data: gatheringRow, error: gatheringErr } = await supabase
+        .from('gatherings')
+        .select('address')
+        .eq('id', gatheringId)
+        .limit(1)
+        .maybeSingle();
+      if (gatheringErr) throw gatheringErr;
+
+      const gatheringAddress = String((gatheringRow as any)?.address ?? '').trim() || null;
+
       const { error: upErr } = await supabase
         .from('gathering_applications')
-        .update({ status: 'paid' })
+        .update({ status: 'paid', gathering_address: gatheringAddress })
         .eq('id', applicationId);
       if (upErr) throw upErr;
 

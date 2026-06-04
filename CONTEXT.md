@@ -448,6 +448,10 @@
   - grant 성공 또는 duplicate 처리 완료 시 pending 값 정리
   - grant 실패 시 pending 유지로 재시도 가능
   - 변경 파일: iap/rniap.ts, iap/purchaseCompleteAlert.tsx, app/store.tsx, app/_layout.tsx
+- 소모임 IAP 결제 후 gathering_address가 NULL로 저장되던 버그 수정
+  - iap/grant.ts에서 gatherings.address를 가져와 gathering_applications.gathering_address에 저장하도록 수정
+  - 결제 성공(status: paid) 시 신청 row의 gathering_id로 gatherings 조회 후 상세 주소 스냅샷 저장
+  - 변경 파일: iap/grant.ts
 - 무제한 매칭권(com.hywoo.fitting.ticket_unlimited) 구매 재차단
   - 상점 UI에서 "준비 중" 표시로 변경
   - onBuyMatchingTicket에서 무제한 SKU 방어 처리 추가
