@@ -18,6 +18,7 @@
     },
     "android": {
       "package": "com.hywoo.fitting",
+      "icon": "./assets/images/android-icon.png",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
