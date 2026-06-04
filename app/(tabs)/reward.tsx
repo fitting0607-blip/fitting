@@ -60,6 +60,7 @@ export default function RewardScreen() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [exchangeBusy, setExchangeBusy] = useState(false);
   const [gatheringStatus, setGatheringStatus] = useState<string | null>(null);
+  const [gatheringApplyEnabled, setGatheringApplyEnabled] = useState(false);
   const [eventSubmitted, setEventSubmitted] = useState(false);
 
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -234,6 +235,7 @@ export default function RewardScreen() {
         setAdWatchToday(0);
         setInviteCount(0);
         setGatheringStatus(null);
+        setGatheringApplyEnabled(false);
         setEventSubmitted(false);
         return;
       }
@@ -250,15 +252,16 @@ export default function RewardScreen() {
       setPoints(typeof row?.points === 'number' ? row.points : 0);
       setMatchingTickets(typeof row?.matching_tickets === 'number' ? row.matching_tickets : 0);
 
-      const { data: activeGathering, error: activeGatheringErr } = await supabase
+      const { data: latestGathering, error: latestGatheringErr } = await supabase
         .from('gatherings')
-        .select('id')
-        .eq('is_active', true)
+        .select('id,is_active')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (activeGatheringErr) throw activeGatheringErr;
-      const gatheringId = (activeGathering as { id?: string } | null)?.id;
+      if (latestGatheringErr) throw latestGatheringErr;
+      const gatheringRow = latestGathering as { id?: string; is_active?: boolean | null } | null;
+      const gatheringId = gatheringRow?.id;
+      setGatheringApplyEnabled(gatheringRow?.is_active === true);
       if (!gatheringId) {
         setGatheringStatus(null);
       } else {
@@ -832,11 +835,16 @@ export default function RewardScreen() {
               </View>
             </View>
             <Pressable
-              onPress={goToGathering}
+              onPress={gatheringApplyEnabled ? goToGathering : undefined}
+              disabled={!gatheringApplyEnabled}
               style={({ pressed }) => [
                 styles.primaryBtn,
-                pressed && styles.primaryBtnPressed,
+                !gatheringApplyEnabled && styles.btnDisabled,
+                pressed && gatheringApplyEnabled && styles.primaryBtnPressed,
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="소모임 신청하기"
+              accessibilityState={{ disabled: !gatheringApplyEnabled }}
             >
               <Text style={styles.primaryBtnText}>소모임 신청하기</Text>
             </Pressable>

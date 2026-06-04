@@ -88,6 +88,7 @@ type GatheringDetail = {
   max_male: number | null;
   max_female: number | null;
   price: number | null;
+  is_active: boolean | null;
 };
 
 export default function StoreScreen() {
@@ -338,37 +339,43 @@ export default function StoreScreen() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('gathering_applications')
-        .select('id,status,gathering_id,created_at')
-        .eq('user_id', user.id)
+      const { data: latestG, error: latestGErr } = await supabase
+        .from('gatherings')
+        .select('id,title,date,time,location,address,max_male,max_female,price,is_active')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (error) throw error;
-      if (!data) {
+      if (latestGErr) throw latestGErr;
+
+      const gr = latestG as any;
+      if (!gr?.id) {
         setMyGathering(null);
         setMyGatheringDetail(null);
         setMyGatheringMaleCount(0);
         setMyGatheringFemaleCount(0);
         return;
       }
-      setMyGathering(data as unknown as MyGatheringApplication);
 
-      const gatheringId = String((data as any)?.gathering_id ?? '').trim();
-      if (!gatheringId) {
-        setMyGatheringDetail(null);
-        setMyGatheringMaleCount(0);
-        setMyGatheringFemaleCount(0);
-        return;
-      }
+      const gatheringId = String(gr.id);
+      setMyGatheringDetail({
+        id: gatheringId,
+        title: gr.title ?? null,
+        date: gr.date ?? null,
+        time: gr.time ?? null,
+        location: gr.location ?? null,
+        address: gr.address ?? null,
+        max_male: typeof gr.max_male === 'number' ? gr.max_male : null,
+        max_female: typeof gr.max_female === 'number' ? gr.max_female : null,
+        price: typeof gr.price === 'number' ? gr.price : null,
+        is_active: typeof gr.is_active === 'boolean' ? gr.is_active : null,
+      });
 
-      const [{ data: g, error: gErr }, { data: apps, error: appsErr }] = await Promise.all([
+      const [{ data: myApp, error: myAppErr }, { data: apps, error: appsErr }] = await Promise.all([
         supabase
-          .from('gatherings')
-          .select('id,title,date,time,location,address,max_male,max_female,price')
-          .eq('id', gatheringId)
-          .limit(1)
+          .from('gathering_applications')
+          .select('id,status,gathering_id,created_at')
+          .eq('user_id', user.id)
+          .eq('gathering_id', gatheringId)
           .maybeSingle(),
         supabase
           .from('gathering_applications')
@@ -376,25 +383,10 @@ export default function StoreScreen() {
           .eq('gathering_id', gatheringId)
           .not('status', 'eq', 'rejected'),
       ]);
-      if (gErr) throw gErr;
+      if (myAppErr) throw myAppErr;
       if (appsErr) throw appsErr;
 
-      const gr = g as any;
-      setMyGatheringDetail(
-        gr?.id
-          ? {
-              id: String(gr.id),
-              title: gr.title ?? null,
-              date: gr.date ?? null,
-              time: gr.time ?? null,
-              location: gr.location ?? null,
-              address: gr.address ?? null,
-              max_male: typeof gr.max_male === 'number' ? gr.max_male : null,
-              max_female: typeof gr.max_female === 'number' ? gr.max_female : null,
-              price: typeof gr.price === 'number' ? gr.price : null,
-            }
-          : null
-      );
+      setMyGathering(myApp ? (myApp as unknown as MyGatheringApplication) : null);
 
       let m = 0;
       let f = 0;
@@ -454,6 +446,12 @@ export default function StoreScreen() {
   );
 
   const goBack = useCallback(() => router.back(), [router]);
+
+  const goToGathering = useCallback(() => {
+    router.push('/gathering');
+  }, [router]);
+
+  const gatheringApplyEnabled = myGatheringDetail?.is_active === true;
 
   const onBuyMatchingTicket = useCallback(
     async (item: StoreItem) => {
@@ -543,6 +541,7 @@ export default function StoreScreen() {
   );
 
   const onPayGathering = useCallback(async () => {
+    if (myGatheringDetail?.is_active !== true) return;
     const status = String(myGathering?.status ?? '').trim();
     if (status !== 'approved') return;
     if (Platform.OS !== 'ios') {
@@ -581,7 +580,7 @@ export default function StoreScreen() {
       setPurchasingSku(null);
       Alert.alert('구매 실패', purchaseAlertMessage(e));
     }
-  }, [myGathering, purchasingSku, clearPurchasingWatchdog, startPurchasingWatchdog]);
+  }, [myGathering, myGatheringDetail?.is_active, purchasingSku, clearPurchasingWatchdog, startPurchasingWatchdog]);
 
   const formatKRW = useCallback((value: number) => {
     const safe = Number.isFinite(value) ? value : 0;
@@ -672,10 +671,45 @@ export default function StoreScreen() {
               <ActivityIndicator size="small" color={MAIN} />
               <Text style={styles.productsLoadingText}>불러오는 중…</Text>
             </View>
-          ) : !myGathering ? (
+          ) : !myGatheringDetail ? (
             <View style={styles.productsEmpty}>
-              <Text style={styles.productsEmptyText}>신청 내역이 없습니다.</Text>
+              <Text style={styles.productsEmptyText}>등록된 소모임이 없습니다.</Text>
             </View>
+          ) : !myGathering ? (
+            <>
+              <View style={styles.noticeCard}>
+                <Text style={styles.noticeText}>신청 후 승인되면 결제할 수 있어요.</Text>
+              </View>
+              <View style={styles.row}>
+                <View style={styles.rowLeft}>
+                  <View style={styles.iconWrap}>
+                    <Feather name="users" size={20} color={MAIN} />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text style={styles.rowTitle}>{myGatheringDetail.title ?? '소모임'}</Text>
+                    <View style={styles.metaLine}>
+                      <Text style={styles.priceText}>
+                        {typeof myGatheringDetail.price === 'number'
+                          ? `₩${formatKRW(myGatheringDetail.price)}`
+                          : '가격: -'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <Pressable
+                  onPress={gatheringApplyEnabled ? goToGathering : undefined}
+                  disabled={!gatheringApplyEnabled}
+                  style={[styles.buyBtn, !gatheringApplyEnabled && styles.buyBtnDisabled]}
+                  accessibilityRole="button"
+                  accessibilityLabel="소모임 신청하기"
+                  accessibilityState={{ disabled: !gatheringApplyEnabled }}
+                >
+                  <Text style={[styles.buyBtnText, !gatheringApplyEnabled && styles.buyBtnTextDisabled]}>
+                    신청
+                  </Text>
+                </Pressable>
+              </View>
+            </>
           ) : (
             <>
               {String(myGathering.status ?? '') === 'pending' ? (
@@ -703,11 +737,10 @@ export default function StoreScreen() {
                   </View>
                   <Pressable
                     onPress={onPayGathering}
-                    disabled={!!purchasingSku}
-                    style={({ pressed }) => [
+                    disabled={!!purchasingSku || !gatheringApplyEnabled}
+                    style={[
                       styles.buyBtn,
-                      !!purchasingSku && styles.buyBtnDisabled,
-                      pressed && !purchasingSku && styles.rowPressed,
+                      (!!purchasingSku || !gatheringApplyEnabled) && styles.buyBtnDisabled,
                     ]}
                     accessibilityRole="button"
                     accessibilityLabel="소모임 결제하기"
@@ -715,7 +748,14 @@ export default function StoreScreen() {
                     {purchasingSku ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.buyBtnText}>구매</Text>
+                      <Text
+                        style={[
+                          styles.buyBtnText,
+                          !gatheringApplyEnabled && styles.buyBtnTextDisabled,
+                        ]}
+                      >
+                        구매
+                      </Text>
                     )}
                   </Pressable>
                 </View>

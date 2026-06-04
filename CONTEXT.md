@@ -452,6 +452,11 @@
   - iap/grant.ts에서 gatherings.address를 가져와 gathering_applications.gathering_address에 저장하도록 수정
   - 결제 성공(status: paid) 시 신청 row의 gathering_id로 gatherings 조회 후 상세 주소 스냅샷 저장
   - 변경 파일: iap/grant.ts
+- 상점 소모임 탭 UI 개선
+  - 최신 소모임 정보(제목, 가격) + 신청 버튼 카드 표시 (피티권 탭 트레이너 등록 카드와 동일한 row 스타일)
+  - gatherings.is_active=false면 신청 버튼 비활성화(회색), true면 활성화하여 /gathering으로 이동
+  - loadMyGathering: is_active 필터 없이 최신 gatherings 1건 조회 후 상세·신청 상태 표시
+  - 변경 파일: app/store.tsx
 - 무제한 매칭권(com.hywoo.fitting.ticket_unlimited) 구매 재차단
   - 상점 UI에서 "준비 중" 표시로 변경
   - onBuyMatchingTicket에서 무제한 SKU 방어 처리 추가

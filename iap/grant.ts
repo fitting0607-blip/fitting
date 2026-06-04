@@ -24,6 +24,13 @@ export type GrantPurchaseResult =
   | { ok: true; kind: 'matching_ticket' | 'pt_ticket' | 'gathering_fee'; grantedTickets?: number; grantedPoints?: number }
   | { ok: false; kind: 'duplicate' | 'unknown_product' | 'not_eligible' | 'db_error'; message: string };
 
+function isUniqueViolationError(error: unknown): boolean {
+  const code = String((error as any)?.code ?? '').trim();
+  if (code === '23505') return true;
+  const msg = String((error as any)?.message ?? error ?? '').toLowerCase();
+  return msg.includes('duplicate') || msg.includes('unique constraint') || msg.includes('unique_violation');
+}
+
 async function insertPayment(payload: {
   user_id: string;
   product_id: string | null;
@@ -31,9 +38,12 @@ async function insertPayment(payload: {
   amount: number | null;
   status: 'succeeded' | 'failed' | 'cancelled';
   transaction_id: string | null;
-}): Promise<{ ok: true } | { ok: false; message: string }> {
+}): Promise<{ ok: true } | { ok: false; duplicate: boolean; message: string }> {
   const { error } = await supabase.from('payments').insert(payload);
-  if (error) return { ok: false, message: String((error as any)?.message ?? error) };
+  if (error) {
+    const message = String((error as any)?.message ?? error);
+    return { ok: false, duplicate: isUniqueViolationError(error), message };
+  }
   return { ok: true };
 }
 
@@ -76,19 +86,18 @@ export async function fetchActiveProductByAppleProductId(productId: string): Pro
 export async function grantAppleIapAndRecord(input: GrantPurchaseInput): Promise<GrantPurchaseResult> {
   const userId = String(input.userId ?? '').trim();
   const productId = String(input.productId ?? '').trim();
-  const transactionId = String(input.transactionId ?? '').trim() || null;
+  const transactionId = String(input.transactionId ?? '').trim();
 
   if (!userId) return { ok: false, kind: 'db_error', message: 'missing userId' };
   if (!productId) return { ok: false, kind: 'unknown_product', message: 'missing productId' };
+  if (!transactionId) return { ok: false, kind: 'db_error', message: 'missing transactionId' };
   if (!isKnownAppleProductId(productId)) {
     return { ok: false, kind: 'unknown_product', message: `unknown productId: ${productId}` };
   }
 
   try {
-    if (transactionId) {
-      const isDup = await hasDuplicateTransactionId(transactionId);
-      if (isDup) return { ok: false, kind: 'duplicate', message: `duplicate transactionId: ${transactionId}` };
-    }
+    const isDup = await hasDuplicateTransactionId(transactionId);
+    if (isDup) return { ok: false, kind: 'duplicate', message: `duplicate transactionId: ${transactionId}` };
 
     const productRow =
       input.productRow ??
@@ -98,21 +107,13 @@ export async function grantAppleIapAndRecord(input: GrantPurchaseInput): Promise
       return { ok: false, kind: 'db_error', message: `product not found in DB: ${productId}` };
     }
 
-    // 1) payments INSERT (중복 체크 이후)
-    {
-      const res = await insertPayment({
-        user_id: userId,
-        product_id: productRow.id ?? null,
-        product_title: productRow.title ?? productId,
-        amount: typeof productRow.price === 'number' ? productRow.price : null,
-        status: 'succeeded',
-        transaction_id: transactionId,
-      });
-      if (!res.ok) return { ok: false, kind: 'db_error', message: `payments insert failed: ${res.message}` };
-    }
+    const isGathering =
+      productId === 'com.hywoo.fitting.gathering_fee' || productRow.category === 'gathering';
 
-    // 2) 지급 로직
-    if (productId === 'com.hywoo.fitting.gathering_fee' || productRow.category === 'gathering') {
+    let gatheringGrant: { applicationId: string; gatheringAddress: string | null } | null = null;
+
+    // 소모임: payments INSERT 전에 신청 상태 검증 (중복 지급·이중 결제 기록 방지)
+    if (isGathering) {
       const applicationId = String(input.context?.gatheringApplicationId ?? '').trim();
       if (!applicationId) {
         return { ok: false, kind: 'db_error', message: 'missing gatheringApplicationId' };
@@ -129,6 +130,9 @@ export async function grantAppleIapAndRecord(input: GrantPurchaseInput): Promise
       if (!appRow) return { ok: false, kind: 'not_eligible', message: 'application not found' };
 
       const curStatus = String((appRow as any)?.status ?? '').trim();
+      if (curStatus === 'paid') {
+        return { ok: false, kind: 'duplicate', message: 'application already paid' };
+      }
       if (curStatus !== 'approved') {
         return { ok: false, kind: 'not_eligible', message: `invalid application status: ${curStatus || '(empty)'}` };
       }
@@ -147,12 +151,43 @@ export async function grantAppleIapAndRecord(input: GrantPurchaseInput): Promise
       if (gatheringErr) throw gatheringErr;
 
       const gatheringAddress = String((gatheringRow as any)?.address ?? '').trim() || null;
+      gatheringGrant = { applicationId, gatheringAddress };
+    }
 
-      const { error: upErr } = await supabase
+    // 1) payments INSERT (transactionId 중복 체크 이후)
+    {
+      const res = await insertPayment({
+        user_id: userId,
+        product_id: productRow.id ?? null,
+        product_title: productRow.title ?? productId,
+        amount: typeof productRow.price === 'number' ? productRow.price : null,
+        status: 'succeeded',
+        transaction_id: transactionId,
+      });
+      if (!res.ok) {
+        if (res.duplicate) {
+          return { ok: false, kind: 'duplicate', message: `duplicate transactionId: ${transactionId}` };
+        }
+        return { ok: false, kind: 'db_error', message: `payments insert failed: ${res.message}` };
+      }
+    }
+
+    // 2) 지급 로직
+    if (isGathering && gatheringGrant) {
+      const { applicationId, gatheringAddress } = gatheringGrant;
+
+      const { data: updatedApp, error: upErr } = await supabase
         .from('gathering_applications')
         .update({ status: 'paid', gathering_address: gatheringAddress })
-        .eq('id', applicationId);
+        .eq('id', applicationId)
+        .eq('user_id', userId)
+        .eq('status', 'approved')
+        .select('id')
+        .maybeSingle();
       if (upErr) throw upErr;
+      if (!updatedApp) {
+        return { ok: false, kind: 'duplicate', message: 'application already paid' };
+      }
 
       return { ok: true, kind: 'gathering_fee' };
     }

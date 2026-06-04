@@ -19,6 +19,7 @@ const MAIN = '#6C47FF';
 
 type GatheringRow = {
   id: string;
+  is_active?: boolean | null;
   max_male?: number | null;
   max_female?: number | null;
   date?: string | null;
@@ -77,8 +78,7 @@ export default function GatheringScreen() {
 
       const { data: gRow, error: gErr } = await supabase
         .from('gatherings')
-        .select('id,max_male,max_female,date,time,location,description')
-        .eq('is_active', true)
+        .select('id,is_active,max_male,max_female,date,time,location,description')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -155,8 +155,10 @@ export default function GatheringScreen() {
     }
   }, [myStatus]);
 
+  const applyEnabled = gathering?.is_active === true;
+
   const onApply = useCallback(async () => {
-    if (!userId || !gathering?.id || applyBusy) return;
+    if (!userId || !gathering?.id || !gathering.is_active || applyBusy) return;
     setApplyBusy(true);
     try {
       const { data: already, error: alreadyErr } = await supabase
@@ -227,7 +229,7 @@ export default function GatheringScreen() {
         },
       },
     ]);
-  }, [userId, gathering?.id, applyBusy]);
+  }, [userId, gathering?.id, gathering?.is_active, applyBusy]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -286,8 +288,15 @@ export default function GatheringScreen() {
 
           <Pressable
             onPress={onApply}
-            disabled={applyBusy}
-            style={({ pressed }) => [styles.primaryBtn, applyBusy && styles.btnDisabled, pressed && !applyBusy && styles.primaryBtnPressed]}
+            disabled={!applyEnabled || applyBusy}
+            style={({ pressed }) => [
+              styles.primaryBtn,
+              (!applyEnabled || applyBusy) && styles.btnDisabled,
+              pressed && applyEnabled && !applyBusy && styles.primaryBtnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="소모임 신청하기"
+            accessibilityState={{ disabled: !applyEnabled || applyBusy }}
           >
             {applyBusy ? (
               <ActivityIndicator color="#FFFFFF" />
