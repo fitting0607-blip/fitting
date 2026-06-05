@@ -42,7 +42,8 @@
             "googleMobileAdsAppId": "ca-app-pub-7157702052156983~5011606956"
           },
           "android": {
-            "googleMobileAdsAppId": "ca-app-pub-7157702052156983~5011606956"
+            "googleMobileAdsAppId": "ca-app-pub-7157702052156983~5011606956",
+            "kotlinVersion": "2.2.0"
           }
         }
       ],

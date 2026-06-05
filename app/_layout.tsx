@@ -4,13 +4,14 @@ import Constants, { AppOwnership } from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { AppState, Platform, StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { attachNotificationResponseHandler, ensureExpoNotificationHandlerInstalled, registerAndSavePushToken } from '@/app/utils/push';
 import { PurchaseCompleteAlertHost } from '@/iap/purchaseCompleteAlert';
 import {
+  CAN_USE_NATIVE_IAP,
   initConnection as initRniapConnection,
   startListeners as startRniapListeners,
   stopListeners as stopRniapListeners,
@@ -47,8 +48,8 @@ export default function RootLayout() {
         .catch(() => null);
     }
 
-    // Expo Go: react-native-iap / NitroModules 없음 — rniap은 로드만 되어도 네이티브 접근 없음, 여기선 초기화 생략
-    if (Platform.OS === 'ios' && Constants.appOwnership !== AppOwnership.Expo) {
+    // Expo Go: react-native-iap / NitroModules 없음 — Dev Client·스토어 빌드에서만 IAP 초기화
+    if (CAN_USE_NATIVE_IAP) {
       void (async () => {
         try {
           await initRniapConnection();

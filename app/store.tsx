@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '@/supabase';
 import {
+  CAN_USE_NATIVE_IAP,
   requestPurchase,
   isDuplicateLikeError,
   setPendingGatheringApplicationId,
@@ -418,7 +419,7 @@ export default function StoreScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (Platform.OS === 'ios') {
+      if (CAN_USE_NATIVE_IAP) {
         void ensureIapReady().then((ok) => {
           if (ok) {
             console.log('[STORE] IAP pre-init ok');
@@ -457,10 +458,6 @@ export default function StoreScreen() {
     async (item: StoreItem) => {
       if (tab !== 'matching') {
         Alert.alert('구매 불가', '다시 시도해주세요.');
-        return;
-      }
-      if (Platform.OS !== 'ios') {
-        Alert.alert('안내', '현재 iOS에서만 인앱결제를 지원합니다.');
         return;
       }
       const sku = item.apple_product_id?.trim();
@@ -506,10 +503,6 @@ export default function StoreScreen() {
         Alert.alert('구매 불가', '승인된 트레이너만 구매 가능합니다.');
         return;
       }
-      if (Platform.OS !== 'ios') {
-        Alert.alert('안내', '현재 iOS에서만 인앱결제를 지원합니다.');
-        return;
-      }
       const sku = item.apple_product_id?.trim();
       if (!sku) {
         Alert.alert('구매 불가', '상품 정보가 올바르지 않습니다.');
@@ -544,10 +537,6 @@ export default function StoreScreen() {
     if (myGatheringDetail?.is_active !== true) return;
     const status = String(myGathering?.status ?? '').trim();
     if (status !== 'approved') return;
-    if (Platform.OS !== 'ios') {
-      Alert.alert('안내', '현재 iOS에서만 인앱결제를 지원합니다.');
-      return;
-    }
     if (!myGathering?.id) return;
     if (purchasingSku) {
       Alert.alert('안내', '결제 처리 중입니다. 잠시 후 다시 시도해주세요.');

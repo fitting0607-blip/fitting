@@ -8,7 +8,11 @@ const base = require('./app.json') as { expo: ExpoConfig };
 
 const config: ExpoConfig = {
   ...base.expo,
-  plugins: [...(((base.expo as any).plugins ?? []) as any[]), 'expo-notifications'],
+  plugins: [
+    ...(((base.expo as any).plugins ?? []) as any[]),
+    'react-native-iap',
+    'expo-notifications',
+  ],
   ios: {
     ...(base.expo.ios ?? {}),
     infoPlist: {

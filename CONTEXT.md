@@ -470,6 +470,14 @@
   - 갱신 실패 시에만 로그인 화면으로 이동
   - 기존 로그인/로그아웃/탈퇴 흐름 유지
   - 변경 파일: supabase.ts, lib/supabaseSession.ts, app/_layout.tsx
+- Android Google IAP 구현
+  - react-native-iap v15로 iOS와 동일한 product ID 사용 (com.hywoo.fitting.ticket_3 등)
+  - purchaseUpdatedListener → DB grant (`iap/grant.ts`) → finishTransaction 아키텍처 유지
+  - `Platform.OS === 'android'`일 때 Google Play Billing, iOS는 기존 Apple IAP 유지
+  - `iap/rniap.ts`: `CAN_USE_NATIVE_IAP` Android 포함, `requestPurchase`에 `google.skus` 추가, `extractPurchaseTransactionId`로 purchaseToken 중복 방지
+  - `app/store.tsx`: iOS 전용 구매 차단 제거, 상점 진입 시 `ensureIapReady` 선호출
+  - `app/_layout.tsx`: Dev Client·스토어 빌드에서 Android도 `initConnection` + `startListeners`
+  - `app.config.ts` / `app.json`: `react-native-iap` Expo 플러그인, Android `kotlinVersion` 2.2.0
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
@@ -478,6 +486,7 @@
 ## 주의사항
 - 소모임 IAP는 Supabase products 테이블에 com.hywoo.fitting.gathering_fee 행이 있어야 grant 가능
 - App Store Connect에도 com.hywoo.fitting.gathering_fee 상품 등록 필요
+- Android IAP는 Google Play Console에 iOS와 동일한 in-app product ID 등록 및 EAS Android 새 빌드 필요 (Expo Go 미지원)
 - 이번 수정 이전에 로그인한 사용자는 AsyncStorage에 세션이 없어 한 번 재로그인 필요
 
 ## 추후 작업

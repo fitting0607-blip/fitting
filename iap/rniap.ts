@@ -15,11 +15,12 @@ export type IapPurchase = Record<string, unknown>;
 export type IapProduct = Record<string, unknown>;
 
 /**
- * iOS native IAP only when not in Expo Go (NitroModules / react-native-iap unavailable there).
- * Matches: Platform.OS === 'ios' && Constants.appOwnership !== 'expo'
+ * Native IAP (App Store / Google Play) when not in Expo Go.
+ * react-native-iap / NitroModules are unavailable in Expo Go.
  */
-const CAN_USE_NATIVE_IAP =
-  Platform.OS === 'ios' && Constants.appOwnership !== AppOwnership.Expo;
+export const CAN_USE_NATIVE_IAP =
+  (Platform.OS === 'ios' || Platform.OS === 'android') &&
+  Constants.appOwnership !== AppOwnership.Expo;
 
 /** Narrow native module surface — loaded only via dynamic import when CAN_USE_NATIVE_IAP. */
 type ReactNativeIapModule = {
@@ -269,7 +270,7 @@ type ProcessResult =
 
 async function processPurchaseLikeListener(purchase: IapPurchase, source: string): Promise<ProcessResult> {
   const productId = String((purchase as any)?.productId ?? '').trim();
-  const transactionId = extractIosTransactionId(purchase);
+  const transactionId = extractPurchaseTransactionId(purchase);
 
   const {
     data: { user },
@@ -498,7 +499,7 @@ export async function debugReprocessPendingPurchases(): Promise<void> {
         const msg = String(e?.message ?? e ?? '');
         const tid = (() => {
           try {
-            return extractIosTransactionId(p);
+            return extractPurchaseTransactionId(p);
           } catch {
             return '(missing)';
           }
@@ -530,7 +531,7 @@ export async function debugReprocessPendingPurchases(): Promise<void> {
  * - Must be manually invoked from a debug button only.
  */
 export async function debugClearTransactionQueueIOS(): Promise<void> {
-  if (!CAN_USE_NATIVE_IAP) return;
+  if (Platform.OS !== 'ios' || !CAN_USE_NATIVE_IAP) return;
   console.log('[IAP] clearTransactionIOS start');
   try {
     const ok = await initConnection();
@@ -589,9 +590,6 @@ async function invalidateBillingConnection(reason: string): Promise<void> {
 }
 
 export async function requestPurchase(productId: string): Promise<void> {
-  if (Platform.OS !== 'ios') {
-    return;
-  }
   if (!CAN_USE_NATIVE_IAP) {
     throw new Error(IAP_PURCHASE_USER_MESSAGE);
   }
@@ -630,14 +628,16 @@ export async function requestPurchase(productId: string): Promise<void> {
   iapPurchaseFlowActive = true;
   notifyIapPurchaseFlowChange();
 
-  // Ensure we always finish manually only after DB grant succeeds.
-  // react-native-iap v8+ (current: v15) expects an object payload.
+  // Finish manually only after DB grant succeeds (both stores).
   const payload = {
     type: 'in-app',
     request: {
       apple: {
         sku,
         andDangerouslyFinishTransactionAutomatically: false,
+      },
+      google: {
+        skus: [sku],
       },
     },
   };
@@ -673,7 +673,7 @@ export function startListeners(): void {
         let skipPurchaseUiIdle = false;
         try {
           productId = String((purchase as any)?.productId ?? '').trim();
-          transactionId = extractIosTransactionId(purchase as IapPurchase);
+          transactionId = extractPurchaseTransactionId(purchase as IapPurchase);
 
           // 1) 같은 세션에서 이미 처리한 transactionId면 silent skip
           if (processedTransactionIds.has(transactionId)) {
@@ -780,7 +780,7 @@ export function startListeners(): void {
 }
 
 export function stopListeners(): void {
-  if (Platform.OS !== 'ios') return;
+  if (!CAN_USE_NATIVE_IAP) return;
   try {
     purchaseUpdatedSub?.remove();
   } catch {}
@@ -806,18 +806,30 @@ export async function finishTransaction(purchase: IapPurchase, productId?: strin
   }
 }
 
-export function extractIosTransactionId(purchase: IapPurchase): string {
-  const t1 = String((purchase as any)?.transactionId ?? '').trim();
-  if (t1) return t1;
+/** Stable id for payments.transaction_id dedup (StoreKit transactionId or Play purchaseToken). */
+export function extractPurchaseTransactionId(purchase: IapPurchase): string {
+  const transactionId = String((purchase as any)?.transactionId ?? '').trim();
+  if (transactionId) return transactionId;
 
-  const t2 = String((purchase as any)?.originalTransactionIdentifierIOS ?? '').trim();
-  if (t2) return t2;
+  const purchaseToken = String(
+    (purchase as any)?.purchaseToken ?? (purchase as any)?.purchaseTokenAndroid ?? ''
+  ).trim();
+  if (purchaseToken) return purchaseToken;
+
+  const originalIos = String((purchase as any)?.originalTransactionIdentifierIOS ?? '').trim();
+  if (originalIos) return originalIos;
 
   const receipt = String((purchase as any)?.transactionReceipt ?? '').trim();
   if (receipt) return `rcpt_${hashShort(receipt)}`;
 
-  throw new Error('transactionId not found on iOS purchase');
+  const id = String((purchase as any)?.id ?? '').trim();
+  if (id) return id;
+
+  throw new Error('transactionId not found on purchase');
 }
+
+/** @deprecated Use extractPurchaseTransactionId */
+export const extractIosTransactionId = extractPurchaseTransactionId;
 
 function getIsConsumable(productId: string): boolean {
   const pid = String(productId ?? '').trim();
