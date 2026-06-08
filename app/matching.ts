@@ -2,10 +2,13 @@ import { Alert } from 'react-native';
 import { router } from 'expo-router';
 
 import { insertMyNotification } from '@/notification-insert';
+import { showMatchBrandedAlert, showMatchCompleteAlert } from '@/app/matchCompleteAlert';
 import { requestPushSend } from '@/app/utils/pushApi';
 import { supabase } from '../supabase';
 
 let matchRequestInFlight = false;
+
+const DAILY_FREE_MATCH_LIMIT = 1;
 
 function getTodayRangeISO() {
   const start = new Date();
@@ -40,7 +43,7 @@ async function getTodaySentCount(requesterId: string) {
 export async function getMatchDailyFreeRemaining() {
   const myId = await getMyUserId();
   const todaySentCount = await getTodaySentCount(myId);
-  const freeRemaining = Math.max(0, 3 - todaySentCount);
+  const freeRemaining = Math.max(0, DAILY_FREE_MATCH_LIMIT - todaySentCount);
   return { myId, todaySentCount, freeRemaining };
 }
 
@@ -56,7 +59,7 @@ async function hasAlreadyRequested(requesterId: string, targetId: string) {
 }
 
 async function consumeTicketIfNeeded(myId: string, todaySentCount: number) {
-  if (todaySentCount < 3) return;
+  if (todaySentCount < DAILY_FREE_MATCH_LIMIT) return;
 
   const { data: me, error: meError } = await supabase
     .from('users')
@@ -69,7 +72,7 @@ async function consumeTicketIfNeeded(myId: string, todaySentCount: number) {
     typeof (me as any)?.matching_tickets === 'number' ? (me as any).matching_tickets : 0;
 
   if (currentTickets <= 0) {
-    Alert.alert('매칭권이 부족해요');
+    showMatchBrandedAlert('매칭권이 부족해요', { confirmLabel: 'OK' });
     throw new Error('NO_TICKET');
   }
 
@@ -82,21 +85,15 @@ async function consumeTicketIfNeeded(myId: string, todaySentCount: number) {
 }
 
 function showFreeRemainingAlert(todaySentCountBeforeThis: number) {
-  // 1회 사용 후(=기존 0회) → 2회 남음
-  if (todaySentCountBeforeThis === 0) {
-    Alert.alert('일일 무료 매칭권 2회 남았어요');
-    return;
-  }
-  // 2회 사용 후(=기존 1회) → 1회 남음
-  if (todaySentCountBeforeThis === 1) {
-    Alert.alert('일일 무료 매칭권 1회 남았어요');
-  }
+  const remainingAfter = DAILY_FREE_MATCH_LIMIT - todaySentCountBeforeThis - 1;
+  if (remainingAfter <= 0) return;
+  Alert.alert(`일일 무료 매칭권 ${remainingAfter}회 남았어요`);
 }
 
 function getFreeRemainingMessage(todaySentCountBeforeThis: number) {
-  if (todaySentCountBeforeThis === 0) return '일일 무료 매칭권 2회 남았어요';
-  if (todaySentCountBeforeThis === 1) return '일일 무료 매칭권 1회 남았어요';
-  return null;
+  const remainingAfter = DAILY_FREE_MATCH_LIMIT - todaySentCountBeforeThis - 1;
+  if (remainingAfter <= 0) return null;
+  return `일일 무료 매칭권 ${remainingAfter}회 남았어요`;
 }
 
 async function getUserNickname(userId: string) {
@@ -211,14 +208,9 @@ export async function runMatchRequest(
     const freeMsg = getFreeRemainingMessage(todaySentCountBeforeThis);
     const message = freeMsg ? `${freeMsg}\n채팅방으로 이동할게요.` : '채팅방으로 이동할게요.';
 
-    Alert.alert('매칭이 완료됐어요! 채팅을 시작해보세요', message, [
-      {
-        text: '확인',
-        onPress: () => {
-          router.push({ pathname: '/chat-room', params: { roomId, nickname } });
-        },
-      },
-    ]);
+    showMatchCompleteAlert('매칭이 완료됐어요! 채팅을 시작해보세요', message, () => {
+      router.push({ pathname: '/chat-room', params: { roomId, nickname } });
+    });
   } catch (e: any) {
     if (e?.message === 'NO_TICKET') return;
     Alert.alert('처리 실패', e?.message ?? '잠시 후 다시 시도해주세요.');
@@ -241,7 +233,7 @@ export function confirmMatchRequest(targetUserId: string) {
       }
 
       const todaySentCountBeforeThis = await getTodaySentCount(myId);
-      const freeRemaining = Math.max(0, 3 - todaySentCountBeforeThis);
+      const freeRemaining = Math.max(0, DAILY_FREE_MATCH_LIMIT - todaySentCountBeforeThis);
       const title =
         freeRemaining > 0
           ? `매칭권을 사용하시겠어요?\n(일일 무료 ${freeRemaining}회 남음)`

@@ -175,7 +175,7 @@
   - 변경 파일: app/settings.tsx
 - 회원탈퇴 정상 작동 확인 (public.users + auth.users 모두 삭제)
 - 상대방 프로필 보기 (10p 차감)
-- 매칭하기 기능 (일일 3회 무료, 매칭권 차감, 단방향 DM)
+- 매칭하기 기능 (일일 1회 무료, 매칭권 차감, 단방향 DM)
 - 채팅 탭 (채팅 목록, 실시간 채팅방, 매칭 후 자동 이동, 알림 벨 아이콘)
   - 채팅 unread 뱃지 정상 표시 (읽음 처리 sender 필터 수정)
   - 채팅방 레이아웃 수정 (상단 여백, 메시지 정렬)
@@ -478,6 +478,19 @@
   - `app/store.tsx`: iOS 전용 구매 차단 제거, 상점 진입 시 `ensureIapReady` 선호출
   - `app/_layout.tsx`: Dev Client·스토어 빌드에서 Android도 `initConnection` + `startListeners`
   - `app.config.ts` / `app.json`: `react-native-iap` Expo 플러그인, Android `kotlinVersion` 2.2.0
+- 일일 무료 매칭권 3회 → 1회로 변경
+  - `app/matching.ts`: `DAILY_FREE_MATCH_LIMIT = 1`, 오늘 `matches` count 기준으로 무료/매칭권 차감 분기
+- 매칭 완료/부족 알럿 버튼 색상 브랜드 컬러(#3B3BF9)로 변경
+  - `app/matchCompleteAlert.tsx`: 커스텀 Modal 알럿 추가 (`showMatchBrandedAlert`, `showMatchCompleteAlert`)
+  - `app/matching.ts`: 매칭 완료 확인 버튼, 매칭권 부족 OK 버튼 적용
+  - `app/_layout.tsx`: `MatchCompleteAlertHost` 등록
+- 회원가입 전화번호 입력 필수로 변경
+  - `app/(auth)/steps/phone-step.tsx`: 010-XXXX-XXXX 유효성 검증 통과 시에만 다음 버튼 활성화
+  - (기존 Apple 심사 대응 선택사항에서 필수 입력으로 복원)
+- 스플래시 아이콘 핏팅 로고로 교체
+  - `assets/images/splash-icon.png` 핏팅 로고로 교체
+  - `app.json` expo-splash-screen 플러그인 이미지 적용
+  - `app/splash.tsx`: `assets/images/logo.png` 사용 (인앱 스플래시)
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류

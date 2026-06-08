@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { attachNotificationResponseHandler, ensureExpoNotificationHandlerInstalled, registerAndSavePushToken } from '@/app/utils/push';
+import { MatchCompleteAlertHost } from '@/app/matchCompleteAlert';
 import { PurchaseCompleteAlertHost } from '@/iap/purchaseCompleteAlert';
 import {
   CAN_USE_NATIVE_IAP,
@@ -194,6 +195,7 @@ export default function RootLayout() {
       ) : null}
       <StatusBar style="auto" />
       <PurchaseCompleteAlertHost />
+      <MatchCompleteAlertHost />
     </ThemeProvider>
     </GestureHandlerRootView>
   );
