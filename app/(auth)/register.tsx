@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { isEmailAlreadyRegistered } from '@/app/utils/checkEmailDuplicate';
 import { supabase } from '../../supabase';
 import { AgeStep } from './steps/age-step';
 import { PrimaryButton } from './steps/components';
@@ -32,6 +33,7 @@ export default function RegisterScreen() {
   const totalSteps = 10;
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10>(1);
   const [loading, setLoading] = useState(false);
+  const [emailDuplicateError, setEmailDuplicateError] = useState<string | null>(null);
   const [draft, setDraft] = useState<RegisterDraft>({
     email: '',
     password: '',
@@ -99,6 +101,7 @@ export default function RegisterScreen() {
       draft.agreements.pointsPolicy
     : isValidEmail(emailTrimmed) &&
       draft.password.length >= 6 &&
+      !emailDuplicateError &&
       draft.agreements.termsOfService &&
       draft.agreements.privacyPolicy &&
       draft.agreements.pointsPolicy;
@@ -112,22 +115,22 @@ export default function RegisterScreen() {
     }
 
     const emailToUse = emailTrimmed.toLowerCase();
+    setEmailDuplicateError(null);
     setLoading(true);
     try {
-      const { count, error } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('email', emailToUse);
+      const { duplicate, errorMessage } = await isEmailAlreadyRegistered(emailToUse);
 
-      if (error) {
-        Alert.alert('오류', error.message);
+      if (errorMessage) {
+        setEmailDuplicateError('이메일 확인에 실패했습니다. 잠시 후 다시 시도해주세요.');
         return;
       }
 
-      if ((count ?? 0) >= 1) {
-        Alert.alert('이미 사용 중인 이메일이에요');
+      if (duplicate) {
+        setEmailDuplicateError('이미 사용 중인 이메일입니다');
         return;
       }
+
+      setEmailDuplicateError(null);
 
       // Normalize email before proceeding to later steps.
       if (draft.email !== emailToUse) {
@@ -169,14 +172,23 @@ export default function RegisterScreen() {
                 <Text style={layoutStyles.label}>이메일</Text>
                 <TextInput
                   value={draft.email}
-                  onChangeText={(text) => setDraft((prev) => ({ ...prev, email: text }))}
+                  onChangeText={(text) => {
+                    setEmailDuplicateError(null);
+                    setDraft((prev) => ({ ...prev, email: text }));
+                  }}
                   placeholder="you@example.com"
                   autoCapitalize="none"
                   keyboardType="email-address"
                   textContentType="emailAddress"
-                  style={[layoutStyles.input, showEmailError ? styles.inputError : null]}
+                  style={[
+                    layoutStyles.input,
+                    showEmailError || emailDuplicateError ? styles.inputError : null,
+                  ]}
                 />
                 {showEmailError ? <Text style={styles.fieldError}>올바른 이메일 형식을 입력해주세요</Text> : null}
+                {!showEmailError && emailDuplicateError ? (
+                  <Text style={styles.fieldError}>{emailDuplicateError}</Text>
+                ) : null}
 
                 <Text style={layoutStyles.label}>비밀번호</Text>
                 <TextInput

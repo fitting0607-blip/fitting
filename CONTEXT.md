@@ -491,6 +491,10 @@
   - `assets/images/splash-icon.png` 핏팅 로고로 교체
   - `app.json` expo-splash-screen 플러그인 이미지 적용
   - `app/splash.tsx`: `assets/images/logo.png` 사용 (인앱 스플래시)
+- 회원가입 이메일 중복 체크 수정
+  - RLS 우회를 위해 `check_email_exists` RPC 함수 사용 (`supabase/migrations/20260608120000_check_email_exists_rpc.sql`)
+  - `app/utils/checkEmailDuplicate.ts`: RPC 호출 유틸 추가
+  - `app/(auth)/register.tsx`: 가입 1단계 다음으로 클릭 시 중복 확인, 이미 가입된 이메일이면 `"이미 사용 중인 이메일입니다"` 표시 및 진행 차단
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
