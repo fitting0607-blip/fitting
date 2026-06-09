@@ -495,6 +495,10 @@
   - RLS 우회를 위해 `check_email_exists` RPC 함수 사용 (`supabase/migrations/20260608120000_check_email_exists_rpc.sql`)
   - `app/utils/checkEmailDuplicate.ts`: RPC 호출 유틸 추가
   - `app/(auth)/register.tsx`: 가입 1단계 다음으로 클릭 시 중복 확인, 이미 가입된 이메일이면 `"이미 사용 중인 이메일입니다"` 표시 및 진행 차단
+- 회원가입 전화번호 중복 체크 (check_phone_exists RPC, 하이픈 무관 숫자 비교, SECURITY DEFINER)
+  - RLS 우회를 위해 `check_phone_exists` RPC 함수 사용 (`supabase/migrations/20260609120000_check_phone_exists_rpc.sql`)
+  - `app/utils/checkPhoneDuplicate.ts`: RPC 호출 유틸 추가
+  - `app/(auth)/steps/phone-step.tsx`: 전화번호 입력 단계 다음으로 클릭 시 중복 확인, 이미 가입된 전화번호이면 `"이미 사용 중인 전화번호입니다"` 표시 및 진행 차단
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
@@ -508,7 +512,6 @@
 
 ## 추후 작업
 - SMS 인증 로직 추가
-- 전화번호 중복 체크
 - users.phone unique 제약조건 추가
 - 광고 시청 기능 (광고 영상 연동 필요)
 

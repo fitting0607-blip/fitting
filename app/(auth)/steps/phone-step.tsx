@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { isPhoneAlreadyRegistered } from '@/app/utils/checkPhoneDuplicate';
 import type { RegisterDraft } from './types';
 import { PrimaryButton } from './components';
 import { layoutStyles } from './ui';
@@ -30,8 +32,41 @@ export function PhoneStep({
   onNext: () => void;
 }) {
   const value = draft.phone ?? '';
+  const [loading, setLoading] = useState(false);
+  const [phoneDuplicateError, setPhoneDuplicateError] = useState<string | null>(null);
   const showError = value.length > 0 && !isValid010Phone(value);
-  const canProceed = isValid010Phone(value);
+  const canProceed = isValid010Phone(value) && !phoneDuplicateError;
+
+  const onPressNext = async () => {
+    if (loading || !isValid010Phone(value)) return;
+
+    const phoneToUse = value.trim();
+    setPhoneDuplicateError(null);
+    setLoading(true);
+    try {
+      const { duplicate, errorMessage } = await isPhoneAlreadyRegistered(phoneToUse);
+
+      if (errorMessage) {
+        setPhoneDuplicateError('전화번호 확인에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+
+      if (duplicate) {
+        setPhoneDuplicateError('이미 사용 중인 전화번호입니다');
+        return;
+      }
+
+      setPhoneDuplicateError(null);
+
+      if (draft.phone !== phoneToUse) {
+        setDraft((prev) => ({ ...prev, phone: phoneToUse }));
+      }
+
+      onNext();
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={layoutStyles.body}>
@@ -41,6 +76,7 @@ export function PhoneStep({
         <TextInput
           value={value}
           onChangeText={(text) => {
+            setPhoneDuplicateError(null);
             const formatted = formatKoreanMobile010(text);
             setDraft((prev) => ({ ...prev, phone: formatted }));
           }}
@@ -48,13 +84,24 @@ export function PhoneStep({
           keyboardType="number-pad"
           textContentType="telephoneNumber"
           maxLength={13}
-          style={[layoutStyles.input, showError ? styles.inputError : null]}
+          style={[
+            layoutStyles.input,
+            showError || phoneDuplicateError ? styles.inputError : null,
+          ]}
         />
         {showError ? <Text style={styles.fieldError}>010-XXXX-XXXX 형식으로 입력해 주세요</Text> : null}
+        {!showError && phoneDuplicateError ? (
+          <Text style={styles.fieldError}>{phoneDuplicateError}</Text>
+        ) : null}
       </View>
 
       <View style={layoutStyles.bottomArea}>
-        <PrimaryButton label="다음으로" disabled={!canProceed} onPress={onNext} />
+        <PrimaryButton
+          label="다음으로"
+          disabled={loading || !canProceed}
+          loading={loading}
+          onPress={onPressNext}
+        />
       </View>
     </View>
   );
