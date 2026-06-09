@@ -141,6 +141,8 @@ export default function SettingsScreen() {
           <Row label="차단목록" onPress={() => router.push('/block-list')} />
           <View style={styles.divider} />
           <Row label="프로필 수정" onPress={() => router.push('/profile-edit')} />
+          <View style={styles.divider} />
+          <Row label="고객센터" onPress={() => router.push('/customer-support' as any)} />
         </View>
       </View>
 

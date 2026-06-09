@@ -14,10 +14,12 @@ const items: NavItem[] = [
   { kind: 'link', to: '/trainers', label: '피티유저' },
 
   { kind: 'section', label: '고객 센터' },
+  { kind: 'link', to: '/inquiries', label: '고객센터' },
   { kind: 'link', to: '/reports', label: '신고목록' },
+
+  { kind: 'section', label: '소모임' },
   { kind: 'link', to: '/gatherings', label: '소모임 관리' },
   { kind: 'link', to: '/gathering-applications', label: '소모임 신청' },
-  { kind: 'link', to: '/ugc-events', label: '이벤트 관리' },
 
   { kind: 'section', label: '결제 관리' },
   { kind: 'link', to: '/payments', label: '결제 정보 관리' },
@@ -26,11 +28,12 @@ const items: NavItem[] = [
   { kind: 'section', label: '콘텐츠' },
   { kind: 'link', to: '/banners', label: '배너관리' },
   { kind: 'link', to: '/terms', label: '약관관리' },
+  { kind: 'link', to: '/ugc-events', label: '이벤트 관리' },
 ]
 
 export function SidebarNav() {
   return (
-    <nav className="px-3 py-2">
+    <nav className="px-3 py-2 pb-10">
       {items.map((item, idx) =>
         item.kind === 'section' ? (
           <div

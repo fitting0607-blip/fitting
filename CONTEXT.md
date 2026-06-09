@@ -111,8 +111,9 @@
   - 약관 관리 페이지 (서비스 이용약관/개인정보 처리방침/포인트 정책 탭)
   - 약관 내용 편집 및 저장 (terms 테이블 upsert)
   - 마지막 업데이트 일자 표시
-  - 사이드바 레이아웃 (유저목록, 피티유저, 신고목록, 상품관리, 배너관리, 약관관리)
-  - 사이드바 섹션 구분 및 간격 정리 (유저관리/고객센터/결제관리/콘텐츠)
+  - 사이드바 레이아웃 (대시보드/유저관리/고객센터/소모임/결제관리/콘텐츠 섹션)
+  - 고객센터 문의 관리 페이지 (답변대기/답변완료 탭, 상세/답변 저장)
+  - 결제 정보 관리 페이지네이션 (20건/페이지, range 쿼리)
   - 관리자 페이지에 소모임 신청 관리 화면 추가 (gathering_applications 테이블 조회, 최신순 정렬, 사이드바 메뉴 연결)
 - RLS 전체 점검 완료 (15개 테이블)
   - 과도한 TRUE 정책 제거: users, posts, likes, trainer_profiles
@@ -499,6 +500,21 @@
   - RLS 우회를 위해 `check_phone_exists` RPC 함수 사용 (`supabase/migrations/20260609120000_check_phone_exists_rpc.sql`)
   - `app/utils/checkPhoneDuplicate.ts`: RPC 호출 유틸 추가
   - `app/(auth)/steps/phone-step.tsx`: 전화번호 입력 단계 다음으로 클릭 시 중복 확인, 이미 가입된 전화번호이면 `"이미 사용 중인 전화번호입니다"` 표시 및 진행 차단
+- 고객센터 문의 기능 (앱: 문의작성/내역/상세, 관리자: 문의목록/답변, inquiries 테이블)
+  - inquiries 테이블 생성 (`supabase/migrations/20260609130000_inquiries_table.sql`)
+  - 컬럼: id, user_id, title, content, answer, answered_at, status(pending/answered), created_at
+  - RLS: 본인 조회/작성, 관리자 전체 조회/답변 업데이트
+  - 앱: 마이탭 설정 > 고객센터 (`app/customer-support.tsx`, `app/inquiry-create.tsx`, `app/inquiry-detail.tsx`)
+  - 관리자: 고객센터 문의 목록/답변 (`admin/src/views/InquiriesPage.tsx`, 답변대기/답변완료 탭, users join 닉네임 표시)
+- 관리자 사이드바 메뉴 구조 정리 (소모임 섹션 분리, 이벤트 관리 콘텐츠 섹션으로 이동)
+  - 변경 파일: `admin/src/ui/nav/SidebarNav.tsx`
+  - 구조: 대시보드 / 유저 관리 / 고객 센터 / 소모임 / 결제 관리 / 콘텐츠
+- 결제 정보 관리 페이지네이션 추가 (20건/페이지, Supabase range 쿼리)
+  - 변경 파일: `admin/src/views/PaymentsPage.tsx`
+  - 하단 이전/다음 버튼 + 현재 페이지/전체 페이지 표시
+- 관리자 사이드바 하단 여백 및 스크롤 개선
+  - `SidebarNav.tsx` 하단 `pb-10`(40px) 여백 추가
+  - `AdminLayout.tsx` 메뉴 영역 `overflow-y-auto` 스크롤 적용
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
@@ -535,6 +551,7 @@
 - public.terms (id, type, content, updated_at)
 - public.payments (id, user_id, product_id, product_title, amount, status, created_at)
 - public.ugc_event_entries (id, user_id, instagram_id, tiktok_id, status, admin_note, reward_paid, created_at)
+- public.inquiries (id, user_id, title, content, answer, answered_at, status, created_at)
 
 ### DB 변경
 - users 테이블 is_admin 컬럼 추가 (boolean, default false)
@@ -557,6 +574,7 @@
 - terms RLS 정책 추가 (전체 조회, 관리자만 INSERT/UPDATE)
 - payments RLS 정책 추가 (관리자 전체 조회, 유저 본인 조회)
 - ugc_event_entries RLS 정책 추가 (본인 제출/조회, 관리자 전체 조회/수정/삭제)
+- inquiries RLS 정책 추가 (본인 조회/작성, 관리자 전체 조회/답변 업데이트)
 
 ### Realtime 활성화
 - messages, notifications
@@ -585,6 +603,9 @@
 - app/store.tsx (상점)
 - app/(tabs)/my.tsx
 - app/settings.tsx
+- app/customer-support.tsx (고객센터 문의 목록)
+- app/inquiry-create.tsx (문의 작성)
+- app/inquiry-detail.tsx (문의 상세)
 - app/terms/[type].tsx (service/privacy/point)
 - app/profile-edit.tsx
 - app/post-create.tsx

@@ -11,6 +11,8 @@ type PaymentRow = {
 
 type UserLite = { id: string; nickname: string | null; email: string | null }
 
+const PAGE_SIZE = 20
+
 function formatDateTime(value: string) {
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return value
@@ -76,73 +78,82 @@ export function PaymentsPage() {
   const [loading, setLoading] = useState(true)
   const [usersById, setUsersById] = useState<Record<string, UserLite>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
+    [totalCount],
+  )
 
   const selected = useMemo(
     () => rows.find((r) => r.id === selectedId) ?? null,
     [rows, selectedId],
   )
 
-  useEffect(() => {
-    let alive = true
-    const run = async () => {
-      setLoading(true)
+  const loadPage = async (targetPage: number) => {
+    setLoading(true)
+    const from = (targetPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
 
-      const { data, error } = await supabase
-        .from('payments')
-        .select('id,user_id,product_title,amount,created_at')
-        .order('created_at', { ascending: false })
+    const { data, error, count } = await supabase
+      .from('payments')
+      .select('id,user_id,product_title,amount,created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to)
 
-      if (!alive) return
-
-      if (error) {
-        alert(error.message)
-        setRows([])
-        setUsersById({})
-        setLoading(false)
-        return
-      }
-
-      const paymentRows = (data ?? []) as unknown as PaymentRow[]
-      setRows(paymentRows)
+    if (error) {
+      alert(error.message)
+      setRows([])
+      setUsersById({})
+      setTotalCount(0)
       setLoading(false)
-
-      const userIds = Array.from(new Set(paymentRows.map((p) => p.user_id))).filter(
-        Boolean,
-      )
-      if (userIds.length === 0) {
-        setUsersById({})
-        return
-      }
-
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('id,nickname,email')
-        .in('id', userIds)
-
-      if (!alive) return
-
-      if (usersError) {
-        alert(usersError.message)
-        setUsersById({})
-        return
-      }
-
-      const map: Record<string, UserLite> = {}
-      for (const u of (usersData ?? []) as any[]) {
-        map[String(u.id)] = {
-          id: String(u.id),
-          nickname: (u.nickname ?? null) as string | null,
-          email: (u.email ?? null) as string | null,
-        }
-      }
-      setUsersById(map)
+      return
     }
 
-    void run()
-    return () => {
-      alive = false
+    const paymentRows = (data ?? []) as unknown as PaymentRow[]
+    setRows(paymentRows)
+    setTotalCount(typeof count === 'number' ? count : paymentRows.length)
+    setLoading(false)
+
+    const userIds = Array.from(new Set(paymentRows.map((p) => p.user_id))).filter(Boolean)
+    if (userIds.length === 0) {
+      setUsersById({})
+      return
     }
-  }, [])
+
+    const { data: usersData, error: usersError } = await supabase
+      .from('users')
+      .select('id,nickname,email')
+      .in('id', userIds)
+
+    if (usersError) {
+      alert(usersError.message)
+      setUsersById({})
+      return
+    }
+
+    const map: Record<string, UserLite> = {}
+    for (const u of (usersData ?? []) as any[]) {
+      map[String(u.id)] = {
+        id: String(u.id),
+        nickname: (u.nickname ?? null) as string | null,
+        email: (u.email ?? null) as string | null,
+      }
+    }
+    setUsersById(map)
+  }
+
+  useEffect(() => {
+    void loadPage(page)
+  }, [page])
+
+  const goToPage = (nextPage: number) => {
+    const clamped = Math.min(Math.max(1, nextPage), totalPages)
+    if (clamped === page) return
+    setSelectedId(null)
+    setPage(clamped)
+  }
 
   const openDetail = (id: string) => setSelectedId(id)
   const closeDetail = () => setSelectedId(null)
@@ -155,7 +166,7 @@ export function PaymentsPage() {
             결제 정보 관리
           </div>
           <div className="mt-1 text-sm text-neutral-500">
-            payments 테이블을 기반으로 결제 내역을 조회합니다.
+            payments 테이블을 기반으로 결제 내역을 조회합니다. (총 {totalCount}건)
           </div>
         </div>
       </div>
@@ -233,6 +244,26 @@ export function PaymentsPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-3">
+        <button
+          className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={() => goToPage(page - 1)}
+          disabled={loading || page <= 1}
+        >
+          이전
+        </button>
+        <span className="text-sm text-neutral-600">
+          {page} / {totalPages}
+        </span>
+        <button
+          className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={() => goToPage(page + 1)}
+          disabled={loading || page >= totalPages}
+        >
+          다음
+        </button>
       </div>
 
       <Modal open={Boolean(selected)} title="결제 상세" onClose={closeDetail}>

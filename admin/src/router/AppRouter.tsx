@@ -15,6 +15,7 @@ import { PaymentsPage } from '../views/PaymentsPage'
 import { GatheringApplicationsPage } from '../views/GatheringApplicationsPage'
 import { GatheringsPage } from '../pages/Gatherings'
 import { UgcEventsPage } from '../pages/UgcEventsPage'
+import { InquiriesPage } from '../views/InquiriesPage'
 
 export function AppRouter() {
   return (
@@ -36,6 +37,7 @@ export function AppRouter() {
             <Route path="/users" element={<UsersPage />} />
             <Route path="/trainers" element={<TrainersPage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/inquiries" element={<InquiriesPage />} />
             <Route path="/products" element={<ProductsPage />} />
             <Route path="/banners" element={<BannersPage />} />
             <Route path="/terms" element={<TermsPage />} />
