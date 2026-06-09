@@ -26,9 +26,9 @@ const items: NavItem[] = [
   { kind: 'link', to: '/products', label: '상품관리' },
 
   { kind: 'section', label: '콘텐츠' },
+  { kind: 'link', to: '/ugc-events', label: '이벤트 관리' },
   { kind: 'link', to: '/banners', label: '배너관리' },
   { kind: 'link', to: '/terms', label: '약관관리' },
-  { kind: 'link', to: '/ugc-events', label: '이벤트 관리' },
 ]
 
 export function SidebarNav() {
