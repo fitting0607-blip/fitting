@@ -33,7 +33,10 @@ const MAIN = '#6C47FF';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_RATIO = 240 / 670;
 const BANNER_WRAP_PADDING_BOTTOM = 14;
-const REWARDED_AD_UNIT_ID = 'ca-app-pub-7157702052156983/5170953977';
+const REWARDED_AD_UNIT_ID =
+  Platform.OS === 'android'
+    ? 'ca-app-pub-7157702052156983/2544790633'
+    : 'ca-app-pub-7157702052156983/5170953977';
 
 /** Expo Go has no native RNGoogleMobileAds; never dynamically import the module there. */
 const IS_EXPO_GO = Constants.appOwnership === AppOwnership.Expo;
