@@ -27,6 +27,8 @@ type PostRow = {
   created_at: string
 }
 
+const PAGE_SIZE = 20
+
 function formatDate(iso: string) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
@@ -34,12 +36,6 @@ function formatDate(iso: string) {
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   return `${yyyy}-${mm}-${dd}`
-}
-
-function includesLoose(haystack: string | null | undefined, needle: string) {
-  if (!needle) return true
-  if (!haystack) return false
-  return haystack.toLowerCase().includes(needle.toLowerCase())
 }
 
 function Modal({
@@ -91,6 +87,8 @@ export function UsersPage() {
   const [rows, setRows] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
   const [selected, setSelected] = useState<UserRow | null>(null)
   const [modalTab, setModalTab] = useState<'info' | 'posts'>('info')
@@ -99,45 +97,64 @@ export function UsersPage() {
   const [posts, setPosts] = useState<PostRow[]>([])
   const [postsLoading, setPostsLoading] = useState(false)
 
-  const visibleRows = useMemo(() => {
-    const q = query.trim()
-    const nonAdmins = rows.filter((r) => !r.is_admin)
-    if (!q) return nonAdmins
-    return nonAdmins.filter(
-      (r) =>
-        includesLoose(r.nickname, q) ||
-        includesLoose(r.email, q) ||
-        includesLoose(r.phone, q),
-    )
-  }, [rows, query])
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
+    [totalCount],
+  )
+
+  const loadPage = async (targetPage: number, searchQuery: string) => {
+    setLoading(true)
+    const from = (targetPage - 1) * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
+    const q = searchQuery.trim()
+
+    let req = supabase
+      .from('users')
+      .select(
+        'id,email,provider,nickname,phone,gender,age,sports,points,matching_tickets,created_at,is_admin',
+        { count: 'exact' },
+      )
+      .or('is_admin.eq.false,is_admin.is.null')
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (q) {
+      const pattern = `%${q}%`
+      req = req.or(`nickname.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`)
+    }
+
+    const { data, error, count } = await req
+
+    if (error) {
+      alert(error.message)
+      setRows([])
+      setTotalCount(0)
+      setLoading(false)
+      return
+    }
+
+    const userRows = (data ?? []) as UserRow[]
+    setRows(userRows)
+    setTotalCount(typeof count === 'number' ? count : userRows.length)
+    setLoading(false)
+  }
 
   useEffect(() => {
-    let alive = true
-    const run = async () => {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from('users')
-        .select(
-          'id,email,provider,nickname,phone,gender,age,sports,points,matching_tickets,created_at,is_admin',
-        )
-        .order('created_at', { ascending: false })
+    void loadPage(page, query)
+  }, [page, query])
 
-      if (!alive) return
-      if (error) {
-        alert(error.message)
-        setRows([])
-        setLoading(false)
-        return
-      }
+  const goToPage = (nextPage: number) => {
+    const clamped = Math.min(Math.max(1, nextPage), totalPages)
+    if (clamped === page) return
+    closeDetail()
+    setPage(clamped)
+  }
 
-      setRows((data ?? []) as UserRow[])
-      setLoading(false)
-    }
-    void run()
-    return () => {
-      alive = false
-    }
-  }, [])
+  const onQueryChange = (value: string) => {
+    setQuery(value)
+    setPage(1)
+    closeDetail()
+  }
 
   const openDetail = (u: UserRow) => {
     setSelected(u)
@@ -206,8 +223,9 @@ export function UsersPage() {
       return
     }
 
-    setRows((prev) => prev.filter((x) => x.id !== u.id))
     if (selected?.id === u.id) closeDetail()
+    setTotalCount((prev) => Math.max(0, prev - 1))
+    setRows((prev) => prev.filter((x) => x.id !== u.id))
   }
 
   const deletePost = async (postId: string) => {
@@ -223,8 +241,6 @@ export function UsersPage() {
     setPosts((prev) => prev.filter((p) => p.id !== postId))
   }
 
-  const totalCount = rows.filter((r) => !r.is_admin).length
-
   return (
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -234,7 +250,7 @@ export function UsersPage() {
         <div className="w-full sm:w-80">
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             placeholder="닉네임, 혹은 이메일로 검색해 주세요"
             className="w-full rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm outline-none ring-[#6C47FF]/15 focus:ring-4"
           />
@@ -262,14 +278,14 @@ export function UsersPage() {
                     로딩 중...
                   </td>
                 </tr>
-              ) : visibleRows.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr>
                   <td className="px-5 py-6 text-neutral-500" colSpan={7}>
                     유저가 없습니다.
                   </td>
                 </tr>
               ) : (
-                visibleRows.map((u) => (
+                rows.map((u) => (
                   <tr key={u.id} className="hover:bg-neutral-50">
                     <td className="whitespace-nowrap px-5 py-4 text-neutral-900">
                       {formatDate(u.created_at)}
@@ -308,6 +324,26 @@ export function UsersPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-3">
+        <button
+          className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={() => goToPage(page - 1)}
+          disabled={loading || page <= 1}
+        >
+          이전
+        </button>
+        <span className="text-sm text-neutral-600">
+          {page} / {totalPages}
+        </span>
+        <button
+          className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={() => goToPage(page + 1)}
+          disabled={loading || page >= totalPages}
+        >
+          다음
+        </button>
       </div>
 
       <Modal
