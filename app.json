@@ -38,10 +38,10 @@
         "expo-build-properties",
         {
           "ios": {
-            "googleMobileAdsAppId": "ca-app-pub-7157702052156983~5011606956"
+            "googleMobileAdsAppId": "ca-app-pub-7157702052156983~4127678119"
           },
           "android": {
-            "googleMobileAdsAppId": "ca-app-pub-7157702052156983~5011606956",
+            "googleMobileAdsAppId": "ca-app-pub-7157702052156983~2749009654",
             "kotlinVersion": "2.2.0"
           }
         }
@@ -49,8 +49,8 @@
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-7157702052156983~5011606956",
-          "iosAppId": "ca-app-pub-7157702052156983~5011606956"
+          "androidAppId": "ca-app-pub-7157702052156983~2749009654",
+          "iosAppId": "ca-app-pub-7157702052156983~4127678119"
         }
       ],
       [
