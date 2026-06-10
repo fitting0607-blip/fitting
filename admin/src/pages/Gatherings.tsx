@@ -333,20 +333,20 @@ export function GatheringsPage() {
 
       <Modal open={modalOpen} title={title} onClose={() => setModalOpen(false)}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="title" value={draft.title} onChange={(v) => setDraft((d) => ({ ...d, title: v }))} />
-          <Field label="date" value={draft.date} onChange={(v) => setDraft((d) => ({ ...d, date: v }))} placeholder="YYYY-MM-DD" />
-          <Field label="time" value={draft.time} onChange={(v) => setDraft((d) => ({ ...d, time: v }))} placeholder="15:00~17:00" />
-          <Field label="location" value={draft.location} onChange={(v) => setDraft((d) => ({ ...d, location: v }))} />
-          <Field label="address" value={draft.address} onChange={(v) => setDraft((d) => ({ ...d, address: v }))} />
+          <Field label="제목" value={draft.title} onChange={(v) => setDraft((d) => ({ ...d, title: v }))} />
+          <Field label="날짜" value={draft.date} onChange={(v) => setDraft((d) => ({ ...d, date: v }))} placeholder="YYYY-MM-DD" />
+          <Field label="시간" value={draft.time} onChange={(v) => setDraft((d) => ({ ...d, time: v }))} placeholder="15:00~17:00" />
+          <Field label="장소" value={draft.location} onChange={(v) => setDraft((d) => ({ ...d, location: v }))} />
+          <Field label="주소" value={draft.address} onChange={(v) => setDraft((d) => ({ ...d, address: v }))} />
           <TextArea
-            label="description"
+            label="소개글"
             value={draft.description}
             onChange={(v) => setDraft((d) => ({ ...d, description: v }))}
             placeholder="소모임 소개글"
           />
-          <Field label="max_male" value={draft.max_male} onChange={(v) => setDraft((d) => ({ ...d, max_male: v }))} />
-          <Field label="max_female" value={draft.max_female} onChange={(v) => setDraft((d) => ({ ...d, max_female: v }))} />
-          <Field label="price" value={draft.price} onChange={(v) => setDraft((d) => ({ ...d, price: v }))} />
+          <Field label="최대 남성 인원" value={draft.max_male} onChange={(v) => setDraft((d) => ({ ...d, max_male: v }))} />
+          <Field label="최대 여성 인원" value={draft.max_female} onChange={(v) => setDraft((d) => ({ ...d, max_female: v }))} />
+          <Field label="참가비" value={draft.price} onChange={(v) => setDraft((d) => ({ ...d, price: v }))} />
           <div className="flex items-center gap-2">
             <input
               id="is_active"
@@ -355,7 +355,7 @@ export function GatheringsPage() {
               onChange={(e) => setDraft((d) => ({ ...d, is_active: e.target.checked }))}
             />
             <label htmlFor="is_active" className="text-sm text-neutral-800">
-              is_active
+              활성화
             </label>
           </div>
         </div>
