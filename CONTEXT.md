@@ -515,6 +515,7 @@
 - 관리자 사이드바 하단 여백 및 스크롤 개선
   - `SidebarNav.tsx` 하단 `pb-10`(40px) 여백 추가
   - `AdminLayout.tsx` 메뉴 영역 `overflow-y-auto` 스크롤 적용
+- userInterfaceStyle "light" 고정 (다크모드 비활성화)
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
