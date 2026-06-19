@@ -374,6 +374,10 @@
   - package.json에 typecheck 스크립트 추가
   - 결제 로직/진단 로그 변경 없음
 - 로그인 시 출석 자동 지급 + 홈 진입 후 팝업 알림
+- 자동로그인(세션 복구) 시에도 출석체크 포인트 지급 되도록 수정 (_layout.tsx)
+  - recoverSupabaseSession() 성공 후 grantAttendanceIfNeededOnLogin 호출
+  - 지급 시 enqueueLoginAttendanceModal로 홈 팝업 예약 (로그인 버튼과 동일)
+  - 앱 시작·포그라운드 복귀 모두 적용, 오류는 try/catch로 앱 실행에 영향 없음
 - 알림 화면 (매칭/좋아요/포인트 알림, 읽음 처리)
 - 매칭/좋아요 알림 DB 트리거 (notify_match_target, notify_like_target)
 - 알림에서 프로필 보기 기능

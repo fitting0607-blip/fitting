@@ -20,6 +20,8 @@ import {
   isIapPurchaseFlowActive,
   subscribeIapPurchaseFlowChange,
 } from '@/iap/rniap';
+import { grantAttendanceIfNeededOnLogin } from '@/attendance-helpers';
+import { enqueueLoginAttendanceModal } from '@/login-attendance-pending';
 import { recoverSupabaseSession } from '@/lib/supabaseSession';
 import { supabase } from '../supabase';
 import SplashScreen from './splash';
@@ -27,6 +29,23 @@ import SplashScreen from './splash';
 export const unstable_settings = {
   anchor: '(tabs)',
 };
+
+async function grantAttendanceAfterSessionRecover() {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) return;
+
+    const attendance = await grantAttendanceIfNeededOnLogin(userId);
+    if (attendance.granted) {
+      enqueueLoginAttendanceModal(attendance.pointsAwarded);
+    }
+  } catch {
+    // best-effort: never block app startup or foreground resume
+  }
+}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -77,6 +96,9 @@ export default function RootLayout() {
         const ok = await recoverSupabaseSession();
         if (!mounted) return;
         setHasSession(ok);
+        if (ok) {
+          await grantAttendanceAfterSessionRecover();
+        }
       } catch {
         if (!mounted) return;
         setHasSession(false);
@@ -124,8 +146,11 @@ export default function RootLayout() {
       sessionRecoveringRef.current = true;
       setSessionRecovering(true);
       void recoverSupabaseSession()
-        .then((ok) => {
+        .then(async (ok) => {
           setHasSession(ok);
+          if (ok) {
+            await grantAttendanceAfterSessionRecover();
+          }
         })
         .catch(() => {
           setHasSession(false);
