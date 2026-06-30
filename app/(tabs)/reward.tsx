@@ -562,7 +562,7 @@ export default function RewardScreen() {
 
           try {
             unsubscribes.push(
-              rewarded.addAdEventListener(AdEventType.LOADED, () => {
+              rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
                 try {
                   void rewarded.show().catch((e: unknown) => {
                     console.error('[RewardedAd] show() failed', e);

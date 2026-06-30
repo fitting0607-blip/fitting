@@ -394,6 +394,8 @@
   - 사진 영역 우측 하단 flag 아이콘, 탭 시 `/report` (targetId, postId 전달)
   - 본인 게시물에는 신고 버튼 미표시
   - 변경 파일: app/(tabs)/index.tsx
+- 리워드 광고 AdEventType → RewardedAdEventType 버그 수정 (광고 로드 안 되던 핵심 원인)
+- 리워드 광고 이벤트 타입 수정 - LOADED/EARNED_REWARD는 RewardedAdEventType, CLOSED/OPENED/ERROR는 AdEventType 사용
 - 차단 기능 (차단/해제, 차단목록, 홈 피드 필터링)
 - (2026-05-20) 차단 유저 게시물 즉시 피드에서 제거
   - 조회 시 blocks 테이블에서 blocker_id=현재 유저인 blocked_id 목록으로 user_id 필터 (기존 유지)
