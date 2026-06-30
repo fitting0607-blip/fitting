@@ -521,6 +521,7 @@
   - `AdminLayout.tsx` 메뉴 영역 `overflow-y-auto` 스크롤 적용
 - userInterfaceStyle "light" 고정 (다크모드 비활성화)
 - 버전 1.0.5로 업데이트 (userInterfaceStyle light 고정, 스토어 URL 변경)
+- 버전 1.0.6으로 업데이트 (자동로그인 출석체크 버그 수정 포함)
 
 ## 알려진 버그 (미수정)
 - 관리자 페이지 승인 완료 탭에 승인/거절 버튼 노출 오류
